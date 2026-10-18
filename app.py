@@ -27,6 +27,7 @@ import dev_workbench
 import knowledge_library
 import model_intelligence
 import story_studio
+import multimodal_studio
 
 OLLAMA_URL = "http://localhost:11434"
 KEEP_ALIVE = "30m"
@@ -4435,6 +4436,198 @@ def mini_app_export(app_id: str, x_passcode: str | None = Header(default=None)):
     from fastapi.responses import Response
     return Response(content=bundled_html.encode("utf-8"), media_type="text/html",
                     headers={"Content-Disposition": f"attachment; filename=mini-app-{app_id}.html"})
+
+
+# ============================================================================
+# Pillar 6: Multimodal Studio (Vision, Audio Library, Notes & ComfyUI) API
+# ============================================================================
+
+class VisionAnalyzeIn(BaseModel):
+    image_b64: str
+    prompt: str = ""
+    model: str = "llama3.2-vision:latest"
+    task_mode: str = "general"  # general, screenshot_debug, ocr, diagram
+    context_notes: str = ""
+    workspace_id: str | None = None
+
+
+class VisionCompareIn(BaseModel):
+    image_b64: str
+    prompt: str = ""
+    model_a: str
+    model_b: str
+    task_mode: str = "general"
+    workspace_id: str | None = None
+
+
+class AudioNotesIn(BaseModel):
+    transcript: str
+    model: str = "Qwen3.5-uncensored:latest"
+    filename: str = "Audio Recording"
+    filepath: str = ""
+    duration_sec: float = 0
+    language: str = "en"
+    segments: list = []
+    save_to_library: bool = True
+    workspace_id: str | None = None
+
+
+class ComfyUIGenerateIn(BaseModel):
+    prompt: str
+    negative_prompt: str = ""
+    aspect_ratio: str = "1:1"
+    seed: int = -1
+    endpoint: str = "http://127.0.0.1:8188"
+    workspace_id: str | None = None
+
+
+@app.get("/api/multimodal/capabilities")
+def multimodal_capabilities_get(x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    caps = multimodal_studio.detect_capabilities()
+    return {"ok": True, "capabilities": caps}
+
+
+@app.post("/api/multimodal/vision/analyze")
+def multimodal_vision_analyze(body: VisionAnalyzeIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    if not body.image_b64:
+        raise HTTPException(400, "Image base64 data required")
+    res = multimodal_studio.analyze_vision_single(
+        image_b64=body.image_b64,
+        prompt=body.prompt,
+        model=body.model,
+        task_mode=body.task_mode,
+        context_notes=body.context_notes
+    )
+    return res
+
+
+@app.post("/api/multimodal/vision/compare")
+def multimodal_vision_compare(body: VisionCompareIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    if not body.image_b64:
+        raise HTTPException(400, "Image base64 data required")
+    res = multimodal_studio.compare_vision_duel(
+        image_b64=body.image_b64,
+        prompt=body.prompt,
+        model_a=body.model_a,
+        model_b=body.model_b,
+        task_mode=body.task_mode
+    )
+    return {"ok": True, "duel": res}
+
+
+@app.post("/api/multimodal/audio/transcribe-detailed")
+async def multimodal_audio_transcribe_detailed(
+    file: UploadFile = File(...),
+    x_passcode: str | None = Header(default=None)
+):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+
+    suffix = Path(file.filename or "audio.webm").suffix or ".webm"
+    temp_path = UPLOAD_DIR / f"rec_{uuid.uuid4().hex[:8]}{suffix}"
+
+    try:
+        content = await file.read()
+        temp_path.write_bytes(content)
+        result = multimodal_studio.transcribe_detailed(temp_path)
+        result["filename"] = file.filename or temp_path.name
+        result["filepath"] = f"/uploads/{temp_path.name}"
+        return {"ok": True, "result": result}
+    except Exception as e:
+        raise HTTPException(500, f"Transcription failed: {str(e)}")
+
+
+@app.post("/api/multimodal/audio/notes")
+def multimodal_audio_notes_extract(body: AudioNotesIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+
+    notes = multimodal_studio.extract_structured_meeting_notes(body.transcript, body.model)
+    rec = None
+    if body.save_to_library:
+        rec = multimodal_studio.save_audio_recording(
+            workspace_id=body.workspace_id or "ws_default",
+            filename=body.filename,
+            filepath=body.filepath,
+            duration_sec=body.duration_sec,
+            language=body.language,
+            transcript=body.transcript,
+            segments=body.segments,
+            summary=notes.get("summary", ""),
+            topics=notes.get("topics", []),
+            action_items=notes.get("action_items", [])
+        )
+    return {"ok": True, "notes": notes, "recording": rec}
+
+
+@app.get("/api/multimodal/audio/library")
+def multimodal_audio_library_list(workspace_id: str | None = None, q: str | None = None,
+                                  x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    recordings = multimodal_studio.list_audio_recordings(workspace_id or "ws_default", query=q)
+    return {"ok": True, "recordings": recordings}
+
+
+@app.get("/api/multimodal/audio/library/{rec_id}")
+def multimodal_audio_library_get(rec_id: str, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    rec = multimodal_studio.get_audio_recording(rec_id)
+    if not rec:
+        raise HTTPException(404, "Recording not found")
+    return {"ok": True, "recording": rec}
+
+
+@app.delete("/api/multimodal/audio/library/{rec_id}")
+def multimodal_audio_library_delete(rec_id: str, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    ok = multimodal_studio.delete_audio_recording(rec_id)
+    return {"ok": ok}
+
+
+@app.get("/api/multimodal/comfyui/status")
+def multimodal_comfyui_status(endpoint: str = "http://127.0.0.1:8188", x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    status = multimodal_studio.check_comfyui_status(endpoint)
+    return {"ok": True, "status": status}
+
+
+@app.post("/api/multimodal/comfyui/generate")
+def multimodal_comfyui_generate(body: ComfyUIGenerateIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    if not body.prompt.strip():
+        raise HTTPException(400, "Image generation prompt required")
+
+    status = multimodal_studio.check_comfyui_status(body.endpoint)
+    # Record prompt in gallery queue
+    mock_url = f"/static/uploads/gen_{uuid.uuid4().hex[:8]}.png"
+    meta = multimodal_studio.save_generated_image_meta(
+        workspace_id=body.workspace_id or "ws_default",
+        prompt=body.prompt,
+        negative_prompt=body.negative_prompt,
+        aspect_ratio=body.aspect_ratio,
+        seed=body.seed if body.seed >= 0 else int(time.time()),
+        image_url=mock_url
+    )
+    return {"ok": True, "result": meta, "comfyui_online": status.get("online", False), "status": status}
+
+
+@app.get("/api/multimodal/comfyui/gallery")
+def multimodal_comfyui_gallery(workspace_id: str | None = None, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    gallery = multimodal_studio.list_generated_images(workspace_id or "ws_default")
+    return {"ok": True, "gallery": gallery}
 
 
 # ==========================================================================

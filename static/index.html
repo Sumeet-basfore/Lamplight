@@ -298,6 +298,21 @@
                 <span>Story Bible, Scene Board, Worldbuilder &amp; Mini-Apps</span>
               </div>
             </button>
+            <button class="workbench-menu-item" type="button" id="wbItemMultimodalStudio">
+              <span class="wb-item-icon wb-icon-cyan" style="color:#06b6d4; background:rgba(6,182,212,0.15); border-color:rgba(6,182,212,0.3);">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                  <circle cx="12" cy="13" r="4"></circle>
+                </svg>
+              </span>
+              <div class="wb-item-info">
+                <div class="wb-item-title-row">
+                  <strong>Multimodal Studio</strong>
+                  <span class="wb-badge wb-badge-cyan" style="background:rgba(6,182,212,0.2); color:#22d3ee; border:1px solid rgba(6,182,212,0.4);">VISION &amp; AUDIO</span>
+                </div>
+                <span>Vision Workspace, Screenshot Debugger, Audio Notes &amp; ComfyUI</span>
+              </div>
+            </button>
           </div>
           <div class="workbench-dropdown-divider"></div>
           <div class="workbench-dropdown-section">
@@ -3840,6 +3855,313 @@
     <div class="modal-footer ss-modal-footer">
       <span id="ssFooterStatus" class="muted" style="flex:1;font-size:0.75rem;">Pillar 5 Creative Studio Active • Isolated Local Sandbox</span>
       <button id="btnDismissStoryStudioModal" class="ghost" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Multimodal Studio Modal (Pillar 6) -->
+<div id="multimodalStudioModal" class="veil hidden">
+  <div class="modal-card mm-modal-card">
+    <div class="modal-head">
+      <div class="modal-title-wrap">
+        <span class="skills-title-icon" style="background:rgba(6,182,212,0.15); color:#06b6d4; border-color:rgba(6,182,212,0.3);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+            <circle cx="12" cy="13" r="4"></circle>
+          </svg>
+        </span>
+        <div>
+          <h3>Multimodal Local AI Studio</h3>
+          <p class="muted" style="margin:0;font-size:0.75rem;">Vision Workspace • Screenshot Debugger • Audio Transcription Desk &amp; Library • ComfyUI Studio • Voice Mode</p>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div class="ss-tab-nav mm-tab-nav">
+        <button type="button" class="ss-tab-btn active" data-tab="mmPaneVision" id="btnMmTabVision">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          Vision &amp; Debugger
+        </button>
+        <button type="button" class="ss-tab-btn" data-tab="mmPaneAudio" id="btnMmTabAudio">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          Audio Transcription &amp; Notes
+        </button>
+        <button type="button" class="ss-tab-btn" data-tab="mmPaneAudioLib" id="btnMmTabAudioLib">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+          Audio Library
+        </button>
+        <button type="button" class="ss-tab-btn" data-tab="mmPaneComfy" id="btnMmTabComfy">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          ComfyUI / SD Studio
+        </button>
+        <button type="button" class="ss-tab-btn" data-tab="mmPaneVoice" id="btnMmTabVoice">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          Voice Conversation
+        </button>
+      </div>
+
+      <button id="btnCloseMultimodalStudioModal" class="ghost closeBtn" title="Close Multimodal Studio">✕</button>
+    </div>
+
+    <!-- Modal Body -->
+    <div class="modal-body mm-modal-body">
+      <!-- ================= TAB 1: VISION WORKSPACE & SCREENSHOT DEBUGGER ================= -->
+      <div id="mmPaneVision" class="ss-tab-pane">
+        <div class="mm-vision-layout">
+          <!-- Left Controls Column -->
+          <div class="mm-vision-input-col">
+            <!-- Dropzone & Preview -->
+            <div id="mmVisionDropzone" class="mm-vision-dropzone">
+              <input type="file" id="mmVisionFileInput" accept="image/*" class="hidden">
+              <div id="mmVisionPromptWrap" class="mm-dropzone-prompt">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <div class="bold" style="font-size:0.85rem; margin-top:6px;">Drop Screenshot or Click to Browse</div>
+                <div class="muted" style="font-size:0.75rem;">Supports PNG, JPG, WebP. You can also paste directly via <strong>Ctrl+V</strong>.</div>
+              </div>
+              <img id="mmVisionPreviewImg" class="mm-vision-preview hidden" alt="Screenshot Preview">
+            </div>
+
+            <!-- Task Mode Selector -->
+            <div class="mm-control-group">
+              <label class="muted bold" style="font-size:0.75rem;">TASK OBJECTIVE</label>
+              <div class="cyber-quick-pills" style="margin-top:4px;">
+                <button type="button" class="cyber-pill active" data-vmode="general">General Vision</button>
+                <button type="button" class="cyber-pill" data-vmode="screenshot_debug">Bug Debugger</button>
+                <button type="button" class="cyber-pill" data-vmode="ocr">OCR / Tables</button>
+                <button type="button" class="cyber-pill" data-vmode="diagram">Diagram / Flow</button>
+              </div>
+            </div>
+
+            <!-- Model Selection Row -->
+            <div class="mm-form-row">
+              <div class="form-group flex-1">
+                <label>Vision Model A:</label>
+                <select id="mmVisionModelA" class="cyber-select-sm"></select>
+              </div>
+              <div class="form-group flex-1 hidden" id="mmVisionModelBWrap">
+                <label>Compare with Model B:</label>
+                <select id="mmVisionModelB" class="cyber-select-sm"></select>
+              </div>
+            </div>
+
+            <div class="row-btns" style="align-items:center; justify-content:space-between;">
+              <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.78rem;">
+                <input type="checkbox" id="mmToggleVisionDuel"> Side-by-Side Model Duel
+              </label>
+            </div>
+
+            <!-- Context Notes (for Screenshot Debugging) -->
+            <div class="form-group" id="mmVisionContextWrap">
+              <label>Error Logs / Stacktrace / Source Context:</label>
+              <textarea id="mmVisionContextNotes" class="cyber-textarea" rows="3" placeholder="Paste console logs or file references for Architect to map against this screenshot..."></textarea>
+            </div>
+
+            <!-- Prompt Inquiry -->
+            <div class="form-group">
+              <label>Prompt Inquiry:</label>
+              <textarea id="mmVisionPromptInput" class="cyber-textarea" rows="2" placeholder="e.g. 'What is causing this UI overflow and how do I fix it in CSS?'"></textarea>
+            </div>
+
+            <button type="button" id="btnMmAnalyzeVision" class="cyber-btn primary-cyan" style="width:100%; justify-content:center; padding:9px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Execute Visual Analysis
+            </button>
+          </div>
+
+          <!-- Right Results Column -->
+          <div class="mm-vision-output-col">
+            <div class="mm-output-header">
+              <strong>Analysis &amp; Model Diagnosis</strong>
+              <span id="mmVisionStatusBadge" class="badge">Awaiting Image</span>
+            </div>
+            <div id="mmVisionResultsContainer" class="mm-vision-results">
+              <div class="muted ss-empty-state">
+                Drop or paste a screenshot on the left and click "Execute Visual Analysis" to inspect error traces, extract tabular data, or compare vision models.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= TAB 2: AUDIO TRANSCRIPTION DESK & NOTES ================= -->
+      <div id="mmPaneAudio" class="ss-tab-pane hidden">
+        <!-- Audio Desk Topbar -->
+        <div class="mm-audio-topbar">
+          <div class="mm-audio-actions">
+            <input type="file" id="mmAudioDeskFileInput" accept="audio/*,video/*" class="hidden">
+            <button type="button" id="btnMmUploadAudio" class="cyber-btn ghost-sm">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Upload Audio File
+            </button>
+            <button type="button" id="btnMmRecordMicDesk" class="cyber-btn primary-rose-sm">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>
+              <span id="mmMicRecordLabel">Record Microphone</span>
+            </button>
+            <span id="mmAudioDeskStatus" class="muted" style="font-size:0.75rem;">Faster-Whisper Ready</span>
+          </div>
+
+          <!-- Audio Player Element -->
+          <div class="mm-audio-player-wrap">
+            <audio id="mmAudioDeskPlayer" controls class="mm-audio-control"></audio>
+          </div>
+        </div>
+
+        <div class="mm-audio-desk-layout">
+          <!-- Left: Timestamped Transcript -->
+          <div class="mm-audio-transcript-col">
+            <div class="mm-transcript-head">
+              <input type="text" id="mmSearchTranscript" class="cyber-input-sm flex-1" placeholder="Search transcript segments...">
+              <button type="button" id="btnMmExportTranscript" class="cyber-btn ghost-sm" title="Export as Markdown / SRT">Export</button>
+            </div>
+            <div id="mmAudioSegmentsContainer" class="mm-segments-list">
+              <div class="muted ss-empty-state">Upload or record audio to generate interactive, timestamped transcript segments.</div>
+            </div>
+          </div>
+
+          <!-- Right: AI Structured Notes -->
+          <div class="mm-audio-notes-col">
+            <div class="mm-notes-head">
+              <strong>Structured Meeting &amp; Lecture Notes</strong>
+              <div style="display:flex; gap:6px;">
+                <button type="button" id="btnMmExtractNotes" class="cyber-btn primary-cyan-sm">Generate Notes (LLM)</button>
+                <button type="button" id="btnMmSaveToAudioLibrary" class="cyber-btn ghost-sm" disabled>Save to Library</button>
+              </div>
+            </div>
+
+            <div class="mm-notes-body">
+              <div class="mm-notes-section">
+                <span class="mm-section-title">Executive Summary</span>
+                <div id="mmAudioNotesSummary" class="mm-notes-box muted">No summary generated yet. Click "Generate Notes (LLM)".</div>
+              </div>
+              <div class="mm-notes-section">
+                <span class="mm-section-title">Key Topics &amp; Themes</span>
+                <div id="mmAudioTopicsList" class="mm-tags-row"></div>
+              </div>
+              <div class="mm-notes-section">
+                <span class="mm-section-title">Action Items &amp; Key Questions</span>
+                <div id="mmAudioActionItemsList" class="mm-action-items-list"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= TAB 3: AUDIO LIBRARY ================= -->
+      <div id="mmPaneAudioLib" class="ss-tab-pane hidden">
+        <div class="ss-toolbar">
+          <input type="text" id="mmSearchAudioLib" class="cyber-input-sm" placeholder="Search saved audio recordings, topics, or transcripts...">
+          <button type="button" id="btnMmRefreshAudioLib" class="cyber-btn ghost-sm">Refresh Library</button>
+        </div>
+        <div id="mmAudioLibraryGrid" class="mm-audio-grid">
+          <div class="muted ss-empty-state">Loading saved audio recordings...</div>
+        </div>
+      </div>
+
+      <!-- ================= TAB 4: COMFYUI / SD IMAGE GENERATION ================= -->
+      <div id="mmPaneComfy" class="ss-tab-pane hidden">
+        <div class="mm-comfy-layout">
+          <!-- Controls Pane -->
+          <div class="mm-comfy-controls-pane">
+            <div class="mm-comfy-endpoint-card">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <label>ComfyUI / SD Instance Endpoint:</label>
+                <span id="mmComfyStatusPill" class="badge">Checking...</span>
+              </div>
+              <div style="display:flex; gap:8px; margin-top:6px;">
+                <input type="text" id="mmComfyEndpointInput" class="cyber-input-sm flex-1" value="http://127.0.0.1:8188">
+                <button type="button" id="btnMmCheckComfy" class="cyber-btn ghost-sm">Test Connection</button>
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-top:12px;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <label>Prompt *</label>
+                <button type="button" id="btnMmEnhancePrompt" class="cyber-btn ghost-sm" style="font-size:0.7rem; padding:2px 8px;">✨ Enhance with LLM</button>
+              </div>
+              <textarea id="mmComfyPrompt" class="cyber-textarea" rows="3" placeholder="e.g. Masterpiece, high fantasy citadel perched on a volcanic cliff, crimson storm clouds, dramatic volumetric lighting, 8k resolution"></textarea>
+            </div>
+
+            <div class="form-group">
+              <label>Negative Prompt</label>
+              <textarea id="mmComfyNegPrompt" class="cyber-textarea" rows="2" placeholder="e.g. blurry, deformed, low quality, artifacts, watermark"></textarea>
+            </div>
+
+            <div class="mm-form-row">
+              <div class="form-group flex-1">
+                <label>Aspect Ratio:</label>
+                <select id="mmComfyAspect" class="cyber-select-sm">
+                  <option value="1:1">1:1 Square (1024x1024)</option>
+                  <option value="16:9">16:9 Landscape (1344x768)</option>
+                  <option value="9:16">9:16 Portrait (768x1344)</option>
+                  <option value="4:3">4:3 Standard (1152x864)</option>
+                </select>
+              </div>
+              <div class="form-group flex-1">
+                <label>Seed (-1 for random):</label>
+                <input type="number" id="mmComfySeed" class="cyber-input-sm" value="-1">
+              </div>
+            </div>
+
+            <button type="button" id="btnMmGenerateImage" class="cyber-btn primary-cyan" style="width:100%; justify-content:center; padding:10px; margin-top:8px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              Synthesize Local Image
+            </button>
+          </div>
+
+          <!-- Preview & Gallery Pane -->
+          <div class="mm-comfy-gallery-pane">
+            <div class="mm-gallery-head">
+              <strong>Generated Imagery Gallery</strong>
+              <span id="mmGalleryCount" class="badge">0 images</span>
+            </div>
+            <div id="mmComfyGalleryGrid" class="mm-gallery-grid">
+              <div class="muted ss-empty-state">No generated images yet. Connect ComfyUI or SD and synthesize your first artwork.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= TAB 5: VOICE CONVERSATION MODE ================= -->
+      <div id="mmPaneVoice" class="ss-tab-pane hidden">
+        <div class="mm-voice-stage">
+          <div class="mm-voice-center-card">
+            <div class="mm-voice-mic-orb-wrap">
+              <button type="button" id="btnMmVoiceToggle" class="mm-voice-orb" title="Click to start/stop voice conversation">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+              </button>
+              <div id="mmVoiceRipple" class="mm-voice-ripple hidden"></div>
+            </div>
+
+            <div id="mmVoiceStatus" class="mm-voice-status">Hands-Free Conversational Voice Ready</div>
+            <div class="muted" style="font-size:0.8rem; margin-top:4px;">Speak freely. Lamplight listens, transcribes via Faster-Whisper, and responds with Kokoro ONNX TTS.</div>
+
+            <!-- Voice Controls & Settings -->
+            <div class="mm-voice-controls-row">
+              <div class="form-group">
+                <label>Kokoro Speech Voice:</label>
+                <select id="mmVoiceSelect" class="cyber-select-sm"></select>
+              </div>
+              <button type="button" id="btnMmInterruptTts" class="cyber-btn ghost-sm danger" title="Interrupt active assistant speech">
+                ⏹ Stop Speaking
+              </button>
+            </div>
+
+            <!-- Live Voice Transcript Stream -->
+            <div class="mm-voice-transcript-card">
+              <div class="mm-voice-transcript-head">Conversation Turns</div>
+              <div id="mmVoiceTranscriptStream" class="mm-voice-stream">
+                <div class="muted" style="font-size:0.8rem; text-align:center; padding:20px;">Your spoken conversation will appear here...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Footer -->
+    <div class="modal-footer mm-modal-footer">
+      <span id="mmFooterStatus" class="muted" style="flex:1;font-size:0.75rem;">Pillar 6 Multimodal Studio Active • 100% Local Inference</span>
+      <button id="btnDismissMultimodalStudioModal" class="ghost" type="button">Close</button>
     </div>
   </div>
 </div>

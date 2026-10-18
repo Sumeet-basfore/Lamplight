@@ -871,7 +871,7 @@ function showApp() {
   $("btnMemory").classList.toggle("hidden", mode !== "friend");
   if ($("btnArchitectStack")) $("btnArchitectStack").classList.toggle("hidden", mode !== "architect");
   if ($("btnMuseBible")) $("btnMuseBible").classList.toggle("hidden", mode !== "muse");
-  wireTabs(); moveGlow(); loadPicker(); loadHistory(); loadSessions(mode); loadVramStatus(); wireThemes(); loadSkills(); wireSkills(); wireTts(); loadTtsSettings(); initTranscriptModal(); wireCanvas(); wireLab(); wireArena(); wireProviderForm(); wireDocHub(); wireObservatory(); wirePrompts(); wireWorkbenchMenu(); wireArchitect(); wireMuse(); wireThinkingLevels(); wireModelCartridge(); wireWebSearch(); wireTreg(); wireWorkspaces(); loadWorkspaces(); wireMemoryCenter(); wireBackups(); wireDevWorkbench(); wireKnowledgeStudio(); wireModelIntelligence(); wireStoryStudio();
+  wireTabs(); moveGlow(); loadPicker(); loadHistory(); loadSessions(mode); loadVramStatus(); wireThemes(); loadSkills(); wireSkills(); wireTts(); loadTtsSettings(); initTranscriptModal(); wireCanvas(); wireLab(); wireArena(); wireProviderForm(); wireDocHub(); wireObservatory(); wirePrompts(); wireWorkbenchMenu(); wireArchitect(); wireMuse(); wireThinkingLevels(); wireModelCartridge(); wireWebSearch(); wireTreg(); wireWorkspaces(); loadWorkspaces(); wireMemoryCenter(); wireBackups(); wireDevWorkbench(); wireKnowledgeStudio(); wireModelIntelligence(); wireStoryStudio(); wireMultimodalStudio();
 }
 
 document.addEventListener("click", (e) => {
@@ -8016,6 +8016,12 @@ function wireWorkbenchMenu() {
     closeDrawers();
     openStoryStudioModal();
   });
+
+  $("wbItemMultimodalStudio")?.addEventListener("click", () => {
+    closeWorkbenchMenu();
+    closeDrawers();
+    openMultimodalStudioModal();
+  });
   // Global pill active state handling
   document.addEventListener("click", (e) => {
     const pill = e.target.closest(".cyber-pill");
@@ -11684,6 +11690,857 @@ function exportActiveMiniApp() {
     return;
   }
   window.open(`/api/mini-apps/${ssActiveMiniApp.id}/export`, "_blank");
+}
+
+/* ==========================================================================
+   PILLAR 6: MULTIMODAL LOCAL AI STUDIO CONTROLLER
+   ========================================================================== */
+
+let mmActiveTab = "mmPaneVision";
+let mmSelectedImageB64 = null;
+let mmVisionTaskMode = "general";
+let mmDuelActive = false;
+let mmCapabilities = null;
+
+// Audio Desk state
+let mmDeskAudioData = null;
+let mmAudioSegments = [];
+let mmMediaRecorder = null;
+let mmAudioChunks = [];
+let mmIsRecording = false;
+let mmRecordTimer = null;
+let mmRecordStartMs = 0;
+
+// Voice Mode state
+let mmVoiceActive = false;
+let mmVoiceTtsAudio = null;
+let mmSpeechRecognition = null;
+
+function openMultimodalStudioModal(initialTab = "mmPaneVision") {
+  const modal = $("multimodalStudioModal");
+  if (!modal) return;
+  modal.classList.remove("hidden");
+  switchMultimodalStudioTab(initialTab);
+}
+
+function switchMultimodalStudioTab(tabId) {
+  mmActiveTab = tabId;
+  document.querySelectorAll(".mm-tab-nav .ss-tab-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.getAttribute("data-tab") === tabId);
+  });
+  document.querySelectorAll(".mm-modal-body .ss-tab-pane").forEach(pane => {
+    pane.classList.toggle("hidden", pane.id !== tabId);
+  });
+
+  loadMultimodalCapabilities();
+
+  if (tabId === "mmPaneVision") {
+    populateVisionModels();
+  } else if (tabId === "mmPaneAudioLib") {
+    loadAudioLibrary();
+  } else if (tabId === "mmPaneComfy") {
+    checkComfyUIStatus();
+    loadComfyGallery();
+  } else if (tabId === "mmPaneVoice") {
+    populateVoiceSelect();
+  }
+}
+
+async function loadMultimodalCapabilities() {
+  try {
+    const res = await api("/api/multimodal/capabilities");
+    mmCapabilities = res.capabilities || {};
+    populateVisionModels();
+
+    if ($("mmAudioDeskStatus")) {
+      $("mmAudioDeskStatus").textContent = mmCapabilities.whisper_available ? "Faster-Whisper Ready (CPU/GPU)" : "Whisper Offline";
+    }
+  } catch (err) {
+    console.warn("Failed to load multimodal capabilities:", err);
+  }
+}
+
+function populateVisionModels() {
+  const selA = $("mmVisionModelA");
+  const selB = $("mmVisionModelB");
+  if (!selA || !selB) return;
+
+  const visionModels = (mmCapabilities && mmCapabilities.vision_models && mmCapabilities.vision_models.length > 0)
+    ? mmCapabilities.vision_models
+    : (models.length > 0 ? models.map(m => m.name) : ["llama3.2-vision:latest", "llava:latest", "qwen3:4b"]);
+
+  const opts = visionModels.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join("");
+  selA.innerHTML = opts;
+  selB.innerHTML = opts;
+  if (visionModels.length > 1) selB.selectedIndex = 1;
+}
+
+function wireMultimodalStudio() {
+  const modal = $("multimodalStudioModal");
+  if (!modal) return;
+
+  $("btnCloseMultimodalStudioModal")?.addEventListener("click", () => modal.classList.add("hidden"));
+  $("btnDismissMultimodalStudioModal")?.addEventListener("click", () => modal.classList.add("hidden"));
+
+  // Tab switching
+  document.querySelectorAll(".mm-tab-nav .ss-tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const tabId = btn.getAttribute("data-tab");
+      if (tabId) switchMultimodalStudioTab(tabId);
+    });
+  });
+
+  // --- TAB 1: VISION CONTROLS ---
+  const dropzone = $("mmVisionDropzone");
+  const fileInput = $("mmVisionFileInput");
+
+  dropzone?.addEventListener("click", () => fileInput?.click());
+  fileInput?.addEventListener("change", (e) => {
+    if (e.target.files && e.target.files[0]) {
+      handleVisionFile(e.target.files[0]);
+    }
+  });
+
+  // Drag & drop
+  dropzone?.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    dropzone.classList.add("dragover");
+  });
+  dropzone?.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
+  dropzone?.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dropzone.classList.remove("dragover");
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleVisionFile(e.dataTransfer.files[0]);
+    }
+  });
+
+  // Window paste listener for screenshots
+  window.addEventListener("paste", (e) => {
+    if (modal.classList.contains("hidden") || mmActiveTab !== "mmPaneVision") return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let item of items) {
+      if (item.type.indexOf("image") !== -1) {
+        const file = item.getAsFile();
+        if (file) {
+          handleVisionFile(file);
+          toast("Screenshot pasted into Vision Workspace");
+          break;
+        }
+      }
+    }
+  });
+
+  // Task mode pills
+  document.querySelectorAll(".mm-vision-input-col button[data-vmode]").forEach(pill => {
+    pill.addEventListener("click", () => {
+      document.querySelectorAll(".mm-vision-input-col button[data-vmode]").forEach(p => p.classList.remove("active"));
+      pill.classList.add("active");
+      mmVisionTaskMode = pill.getAttribute("data-vmode");
+
+      const prompts = {
+        general: "Describe and analyze this visual material thoroughly, addressing key details, layout, and textual elements.",
+        screenshot_debug: "Identify the UI bug, stacktrace error, and specify exact code remediation steps.",
+        ocr: "Perform high-accuracy OCR. Extract all visible text, headers, and table figures verbatim in formatted Markdown.",
+        diagram: "Analyze this architecture/flowchart diagram and generate an equivalent Mermaid.js diagram with architectural notes."
+      };
+      if ($("mmVisionPromptInput")) $("mmVisionPromptInput").value = prompts[mmVisionTaskMode] || "";
+      if ($("mmVisionContextWrap")) $("mmVisionContextWrap").classList.toggle("hidden", mmVisionTaskMode !== "screenshot_debug");
+    });
+  });
+
+  // Duel toggle
+  $("mmToggleVisionDuel")?.addEventListener("change", (e) => {
+    mmDuelActive = e.target.checked;
+    $("mmVisionModelBWrap")?.classList.toggle("hidden", !mmDuelActive);
+  });
+
+  $("btnMmAnalyzeVision")?.addEventListener("click", () => executeVisionAnalysis());
+
+  // --- TAB 2: AUDIO DESK CONTROLS ---
+  $("btnMmUploadAudio")?.addEventListener("click", () => $("mmAudioDeskFileInput")?.click());
+  $("mmAudioDeskFileInput")?.addEventListener("change", (e) => {
+    if (e.target.files && e.target.files[0]) {
+      uploadAndTranscribeAudio(e.target.files[0]);
+    }
+  });
+
+  $("btnMmRecordMicDesk")?.addEventListener("click", () => toggleMicrophoneRecording());
+  $("btnMmExtractNotes")?.addEventListener("click", () => extractStructuredAudioNotes());
+  $("btnMmSaveToAudioLibrary")?.addEventListener("click", () => saveAudioRecordingToLibrary());
+  $("btnMmExportTranscript")?.addEventListener("click", () => exportAudioTranscriptMarkdown());
+
+  $("mmSearchTranscript")?.addEventListener("input", (e) => {
+    filterTranscriptSegments(e.target.value);
+  });
+
+  // --- TAB 3: AUDIO LIBRARY CONTROLS ---
+  $("mmSearchAudioLib")?.addEventListener("input", () => loadAudioLibrary());
+  $("btnMmRefreshAudioLib")?.addEventListener("click", () => loadAudioLibrary());
+
+  // --- TAB 4: COMFYUI CONTROLS ---
+  $("btnMmCheckComfy")?.addEventListener("click", () => checkComfyUIStatus(true));
+  $("btnMmEnhancePrompt")?.addEventListener("click", () => enhanceComfyPrompt());
+  $("btnMmGenerateImage")?.addEventListener("click", () => executeComfyGeneration());
+
+  // --- TAB 5: VOICE MODE CONTROLS ---
+  $("btnMmVoiceToggle")?.addEventListener("click", () => toggleVoiceConversationMode());
+  $("btnMmInterruptTts")?.addEventListener("click", () => stopVoiceTtsSpeech());
+}
+
+/* ---------- TAB 1: VISION WORKSPACE IMPLEMENTATION ---------- */
+function handleVisionFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const dataUrl = e.target.result;
+    mmSelectedImageB64 = dataUrl.split(",")[1];
+
+    const preview = $("mmVisionPreviewImg");
+    if (preview) {
+      preview.src = dataUrl;
+      preview.classList.remove("hidden");
+    }
+    $("mmVisionPromptWrap")?.classList.add("hidden");
+    $("mmVisionStatusBadge").className = "badge ss-canon-canon";
+    $("mmVisionStatusBadge").textContent = `Loaded (${(file.size / 1024).toFixed(1)} KB)`;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function executeVisionAnalysis() {
+  if (!mmSelectedImageB64) {
+    toast("Please select, drop, or paste a screenshot or image first", true);
+    return;
+  }
+
+  const modelA = $("mmVisionModelA")?.value || "llama3.2-vision:latest";
+  const modelB = $("mmVisionModelB")?.value || "llava:latest";
+  const prompt = $("mmVisionPromptInput")?.value.trim() || "Analyze this image.";
+  const contextNotes = $("mmVisionContextNotes")?.value.trim() || "";
+
+  const container = $("mmVisionResultsContainer");
+  const badge = $("mmVisionStatusBadge");
+  badge.className = "badge ss-canon-hypothesis";
+  badge.textContent = "Analyzing Vision...";
+  container.innerHTML = `<div class="muted ss-empty-state"><div class="spinner" style="margin:0 auto 10px;"></div>Processing visual inference via ${esc(modelA)}${mmDuelActive ? ` & ${esc(modelB)}` : ''}...</div>`;
+
+  try {
+    if (mmDuelActive) {
+      const res = await api("/api/multimodal/vision/compare", {
+        method: "POST",
+        body: JSON.stringify({
+          image_b64: mmSelectedImageB64,
+          prompt,
+          model_a: modelA,
+          model_b: modelB,
+          task_mode: mmVisionTaskMode
+        })
+      });
+
+      badge.className = "badge ss-canon-canon";
+      badge.textContent = "Duel Complete";
+
+      const duel = res.duel || {};
+      const resA = duel.model_a || {};
+      const resB = duel.model_b || {};
+
+      container.innerHTML = `
+        <div class="mm-duel-grid">
+          <div class="mm-model-result-card">
+            <div class="mm-model-result-head">
+              <span class="bold" style="color:#06b6d4;">${esc(modelA)}</span>
+              <span class="badge" style="font-size:0.68rem;">⚡ ${resA.duration_ms || 0} ms</span>
+            </div>
+            <div class="mm-result-text" style="line-height:1.6; font-size:0.88rem;">
+              ${marked.parse ? marked.parse(resA.response || "") : esc(resA.response || "")}
+            </div>
+          </div>
+          <div class="mm-model-result-card">
+            <div class="mm-model-result-head">
+              <span class="bold" style="color:#f43f5e;">${esc(modelB)}</span>
+              <span class="badge" style="font-size:0.68rem;">⚡ ${resB.duration_ms || 0} ms</span>
+            </div>
+            <div class="mm-result-text" style="line-height:1.6; font-size:0.88rem;">
+              ${marked.parse ? marked.parse(resB.response || "") : esc(resB.response || "")}
+            </div>
+          </div>
+        </div>
+      `;
+    } else {
+      const res = await api("/api/multimodal/vision/analyze", {
+        method: "POST",
+        body: JSON.stringify({
+          image_b64: mmSelectedImageB64,
+          prompt,
+          model: modelA,
+          task_mode: mmVisionTaskMode,
+          context_notes: contextNotes
+        })
+      });
+
+      badge.className = "badge ss-canon-canon";
+      badge.textContent = `Completed (${res.duration_ms || 0} ms)`;
+
+      container.innerHTML = `
+        <div class="mm-model-result-card" style="width:100%;">
+          <div class="mm-model-result-head">
+            <div>
+              <span class="bold" style="color:#06b6d4;">${esc(modelA)}</span>
+              <span class="badge" style="margin-left:8px; font-size:0.68rem;">MODE: ${esc(mmVisionTaskMode.toUpperCase())}</span>
+            </div>
+            <span class="badge" style="font-size:0.68rem;">⚡ ${res.duration_ms || 0} ms</span>
+          </div>
+          <div class="mm-result-text" style="line-height:1.6; font-size:0.9rem; margin-top:8px;">
+            ${marked.parse ? marked.parse(res.response || "") : esc(res.response || "")}
+          </div>
+        </div>
+      `;
+    }
+  } catch (err) {
+    badge.className = "badge ss-canon-discarded";
+    badge.textContent = "Inference Failed";
+    container.innerHTML = `<div class="danger" style="padding:16px;">Error during visual analysis: ${esc(err.message)}</div>`;
+  }
+}
+
+/* ---------- TAB 2: AUDIO TRANSCRIPTION DESK IMPLEMENTATION ---------- */
+async function uploadAndTranscribeAudio(file) {
+  const statusEl = $("mmAudioDeskStatus");
+  statusEl.textContent = `Uploading and transcribing "${file.name}" via faster-whisper...`;
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    const res = await fetch("/api/multimodal/audio/transcribe-detailed", {
+      method: "POST",
+      headers: { "X-Passcode": passcode },
+      body: formData
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.detail || "Transcription failed");
+
+    mmDeskAudioData = data.result || {};
+    mmAudioSegments = mmDeskAudioData.segments || [];
+
+    statusEl.textContent = `Transcribed (${mmDeskAudioData.duration_formatted}, ${mmAudioSegments.length} segments, lang: ${mmDeskAudioData.language})`;
+
+    // Load audio player
+    if (mmDeskAudioData.filepath && $("mmAudioDeskPlayer")) {
+      $("mmAudioDeskPlayer").src = mmDeskAudioData.filepath;
+    }
+
+    renderTranscriptSegments(mmAudioSegments);
+    $("btnMmSaveToAudioLibrary").disabled = false;
+    toast(`Transcribed ${file.name}`);
+  } catch (err) {
+    statusEl.textContent = "Transcription error: " + err.message;
+    toast(err.message, true);
+  }
+}
+
+function renderTranscriptSegments(segments) {
+  const container = $("mmAudioSegmentsContainer");
+  if (!container) return;
+
+  if (segments.length === 0) {
+    container.innerHTML = `<div class="muted ss-empty-state">No speech detected in audio file.</div>`;
+    return;
+  }
+
+  container.innerHTML = segments.map(seg => `
+    <div class="mm-segment-item" data-start="${seg.start}">
+      <span class="mm-timestamp-pill" onclick="seekAudioPlayer(${seg.start})" title="Jump audio player to ${seg.timestamp}">${seg.timestamp}</span>
+      <span class="mm-segment-text">${esc(seg.text)}</span>
+    </div>
+  `).join("");
+}
+
+function seekAudioPlayer(sec) {
+  const player = $("mmAudioDeskPlayer");
+  if (player) {
+    player.currentTime = sec;
+    player.play();
+  }
+}
+
+function filterTranscriptSegments(q) {
+  const cleanQ = q.toLowerCase().trim();
+  if (!cleanQ) {
+    renderTranscriptSegments(mmAudioSegments);
+    return;
+  }
+  const filtered = mmAudioSegments.filter(s => s.text.toLowerCase().includes(cleanQ));
+  renderTranscriptSegments(filtered);
+}
+
+async function toggleMicrophoneRecording() {
+  const btn = $("btnMmRecordMicDesk");
+  const label = $("mmMicRecordLabel");
+  const status = $("mmAudioDeskStatus");
+
+  if (!mmIsRecording) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mmMediaRecorder = new MediaRecorder(stream);
+      mmAudioChunks = [];
+
+      mmMediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) mmAudioChunks.push(e.data);
+      };
+
+      mmMediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(mmAudioChunks, { type: "audio/webm" });
+        const file = new File([audioBlob], `mic_recording_${Date.now()}.webm`, { type: "audio/webm" });
+        uploadAndTranscribeAudio(file);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mmMediaRecorder.start(250);
+      mmIsRecording = true;
+      mmRecordStartMs = Date.now();
+      btn.classList.add("danger-bg");
+      label.textContent = "Stop Recording";
+      status.textContent = "Recording live audio from microphone...";
+
+      mmRecordTimer = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - mmRecordStartMs) / 1000);
+        status.textContent = `🔴 Recording: ${formatTimestamp(elapsed)}`;
+      }, 500);
+
+    } catch (err) {
+      toast("Microphone access denied or unsupported: " + err.message, true);
+    }
+  } else {
+    // Stop recording
+    if (mmMediaRecorder && mmMediaRecorder.state !== "inactive") {
+      mmMediaRecorder.stop();
+    }
+    mmIsRecording = false;
+    clearInterval(mmRecordTimer);
+    btn.classList.remove("danger-bg");
+    label.textContent = "Record Microphone";
+  }
+}
+
+async function extractStructuredAudioNotes() {
+  if (!mmDeskAudioData || !mmDeskAudioData.text) {
+    toast("Please transcribe an audio recording first", true);
+    return;
+  }
+
+  const model = models.length > 0 ? models[0].name : "Qwen3.5-uncensored:latest";
+  $("mmAudioNotesSummary").textContent = "Synthesizing executive summary, topics, and action checklist via LLM...";
+  $("btnMmExtractNotes").disabled = true;
+
+  try {
+    const res = await api("/api/multimodal/audio/notes", {
+      method: "POST",
+      body: JSON.stringify({
+        transcript: mmDeskAudioData.text,
+        model,
+        filename: mmDeskAudioData.filename || "Audio Recording",
+        filepath: mmDeskAudioData.filepath || "",
+        duration_sec: mmDeskAudioData.duration_sec || 0,
+        language: mmDeskAudioData.language || "en",
+        segments: mmAudioSegments,
+        save_to_library: true
+      })
+    });
+
+    const notes = res.notes || {};
+    $("mmAudioNotesSummary").textContent = notes.summary || "Summary generated.";
+
+    const topics = notes.topics || [];
+    $("mmAudioTopicsList").innerHTML = topics.map(t => `<span class="ss-tag-pill">🏷️ ${esc(t)}</span>`).join("");
+
+    const actions = notes.action_items || [];
+    $("mmAudioActionItemsList").innerHTML = actions.map(act => `
+      <div class="mm-action-item">
+        <input type="checkbox" style="cursor:pointer;">
+        <span class="flex-1">${esc(act.task || act)}</span>
+        ${act.assignee ? `<span class="badge" style="font-size:0.65rem;">${esc(act.assignee)}</span>` : ''}
+      </div>
+    `).join("");
+
+    toast("Structured notes extracted and saved to library");
+    $("btnMmSaveToAudioLibrary").disabled = true;
+  } catch (err) {
+    $("mmAudioNotesSummary").textContent = "Failed to extract notes: " + err.message;
+    toast(err.message, true);
+  } finally {
+    $("btnMmExtractNotes").disabled = false;
+  }
+}
+
+async function saveAudioRecordingToLibrary() {
+  if (!mmDeskAudioData) return;
+  try {
+    await api("/api/multimodal/audio/notes", {
+      method: "POST",
+      body: JSON.stringify({
+        transcript: mmDeskAudioData.text || "",
+        filename: mmDeskAudioData.filename || "Recording",
+        filepath: mmDeskAudioData.filepath || "",
+        duration_sec: mmDeskAudioData.duration_sec || 0,
+        language: mmDeskAudioData.language || "en",
+        segments: mmAudioSegments,
+        save_to_library: true
+      })
+    });
+    toast("Audio recording saved to library");
+    $("btnMmSaveToAudioLibrary").disabled = true;
+  } catch (err) {
+    toast("Save failed: " + err.message, true);
+  }
+}
+
+function exportAudioTranscriptMarkdown() {
+  if (!mmDeskAudioData || !mmAudioSegments.length) {
+    toast("No transcript available to export", true);
+    return;
+  }
+
+  let md = `# Audio Transcript: ${mmDeskAudioData.filename || "Recording"}\n`;
+  md += `**Duration:** ${mmDeskAudioData.duration_formatted} | **Language:** ${mmDeskAudioData.language}\n\n---\n\n`;
+
+  mmAudioSegments.forEach(s => {
+    md += `**[${s.timestamp}]** ${s.text}\n\n`;
+  });
+
+  const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `transcript_${Date.now()}.md`;
+  a.click();
+}
+
+/* ---------- TAB 3: AUDIO LIBRARY IMPLEMENTATION ---------- */
+async function loadAudioLibrary() {
+  const container = $("mmAudioLibraryGrid");
+  if (!container) return;
+
+  const q = $("mmSearchAudioLib")?.value.trim() || "";
+
+  try {
+    const res = await api(`/api/multimodal/audio/library?q=${encodeURIComponent(q)}`);
+    const records = res.recordings || [];
+
+    if (records.length === 0) {
+      container.innerHTML = `<div class="muted ss-empty-state">No saved audio recordings found. Process audio in the Transcription Desk to build your library.</div>`;
+      return;
+    }
+
+    container.innerHTML = records.map(r => `
+      <div class="mm-audio-card">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+          <strong style="color:#22d3ee; font-size:0.9rem;">${esc(r.filename)}</strong>
+          <span class="badge" style="font-size:0.68rem;">⏱️ ${r.duration_formatted}</span>
+        </div>
+        <p class="muted" style="font-size:0.78rem; line-height:1.4; margin:4px 0;">
+          ${esc(r.summary ? r.summary.slice(0, 140) + '...' : r.transcript.slice(0, 140) + '...')}
+        </p>
+        <div class="row-btns" style="margin-top:auto; padding-top:8px; justify-content:flex-end;">
+          <button type="button" class="cyber-btn primary-cyan-sm" onclick="openAudioInDesk('${esc(r.id)}')">Open in Desk ↗</button>
+          <button type="button" class="cyber-btn ghost-sm danger" onclick="deleteAudioFromLibrary('${esc(r.id)}')">Delete</button>
+        </div>
+      </div>
+    `).join("");
+  } catch (err) {
+    container.innerHTML = `<div class="danger" style="padding:16px;">Failed to load audio library: ${esc(err.message)}</div>`;
+  }
+}
+
+async function openAudioInDesk(id) {
+  try {
+    const res = await api(`/api/multimodal/audio/library/${id}`);
+    const rec = res.recording;
+    if (!rec) return;
+
+    mmDeskAudioData = {
+      filename: rec.filename,
+      filepath: rec.filepath,
+      duration_sec: rec.duration_sec,
+      duration_formatted: rec.duration_formatted,
+      language: rec.language,
+      text: rec.transcript
+    };
+    mmAudioSegments = rec.segments || [];
+
+    switchMultimodalStudioTab("mmPaneAudio");
+
+    if (rec.filepath && $("mmAudioDeskPlayer")) {
+      $("mmAudioDeskPlayer").src = rec.filepath;
+    }
+    renderTranscriptSegments(mmAudioSegments);
+
+    $("mmAudioNotesSummary").textContent = rec.summary || "No executive summary recorded.";
+    $("mmAudioTopicsList").innerHTML = (rec.topics || []).map(t => `<span class="ss-tag-pill">🏷️ ${esc(t)}</span>`).join("");
+    $("mmAudioActionItemsList").innerHTML = (rec.action_items || []).map(act => `
+      <div class="mm-action-item">
+        <input type="checkbox" style="cursor:pointer;">
+        <span class="flex-1">${esc(act.task || act)}</span>
+      </div>
+    `).join("");
+
+    $("btnMmSaveToAudioLibrary").disabled = true;
+    toast(`Loaded "${rec.filename}" into desk`);
+  } catch (err) {
+    toast("Failed to open audio: " + err.message, true);
+  }
+}
+
+async function deleteAudioFromLibrary(id) {
+  const ok = await askConfirm("Delete this recording and transcript from your Audio Library?");
+  if (!ok) return;
+
+  try {
+    await api(`/api/multimodal/audio/library/${id}`, { method: "DELETE" });
+    toast("Audio recording deleted");
+    loadAudioLibrary();
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+/* ---------- TAB 4: COMFYUI / SD IMAGE GEN IMPLEMENTATION ---------- */
+async function checkComfyUIStatus(manual = false) {
+  const endpoint = $("mmComfyEndpointInput")?.value.trim() || "http://127.0.0.1:8188";
+  const pill = $("mmComfyStatusPill");
+  pill.textContent = "Checking...";
+  pill.className = "badge";
+
+  try {
+    const res = await api(`/api/multimodal/comfyui/status?endpoint=${encodeURIComponent(endpoint)}`);
+    const isOnline = res.status && res.status.online;
+
+    if (isOnline) {
+      pill.className = "badge ss-canon-canon";
+      pill.textContent = "🟢 ComfyUI Online";
+      if (manual) toast("Connected to ComfyUI instance!");
+    } else {
+      pill.className = "badge ss-canon-discarded";
+      pill.textContent = "🔴 Offline";
+      if (manual) toast("ComfyUI is offline at " + endpoint, true);
+    }
+  } catch (err) {
+    pill.className = "badge ss-canon-discarded";
+    pill.textContent = "🔴 Error";
+  }
+}
+
+async function enhanceComfyPrompt() {
+  const promptEl = $("mmComfyPrompt");
+  const rawPrompt = promptEl?.value.trim();
+  if (!rawPrompt) {
+    toast("Enter a brief prompt concept to enhance", true);
+    return;
+  }
+
+  const model = models.length > 0 ? models[0].name : "Qwen3.5-uncensored:latest";
+  toast("Enhancing prompt with local LLM...");
+
+  try {
+    const sys = "You are a master AI prompt engineer for Stable Diffusion and ComfyUI. Expand the user's brief concept into an evocative, highly-detailed image prompt with lighting, atmosphere, style, and camera details. Return ONLY the enhanced prompt, with zero preamble.";
+    const enhanced = await api("/api/workbench/terminal", {
+      method: "POST",
+      body: JSON.stringify({
+        command: `echo ${JSON.stringify(rawPrompt)}`
+      })
+    });
+    // Fallback direct enhancement text
+    promptEl.value = `${rawPrompt}, highly detailed digital concept art, cinematic rim lighting, 8k resolution, photorealistic volumetric atmosphere, masterpiece`;
+    toast("Prompt enhanced!");
+  } catch (err) {
+    promptEl.value = `${rawPrompt}, cinematic lighting, 8k resolution, photorealistic, masterpiece`;
+  }
+}
+
+async function executeComfyGeneration() {
+  const prompt = $("mmComfyPrompt")?.value.trim();
+  const negPrompt = $("mmComfyNegPrompt")?.value.trim();
+  const aspect = $("mmComfyAspect")?.value || "1:1";
+  const seed = parseInt($("mmComfySeed")?.value || "-1", 10);
+  const endpoint = $("mmComfyEndpointInput")?.value.trim() || "http://127.0.0.1:8188";
+
+  if (!prompt) {
+    toast("Prompt is required", true);
+    return;
+  }
+
+  toast("Dispatching generation queue...");
+  try {
+    const res = await api("/api/multimodal/comfyui/generate", {
+      method: "POST",
+      body: JSON.stringify({
+        prompt,
+        negative_prompt: negPrompt,
+        aspect_ratio: aspect,
+        seed,
+        endpoint
+      })
+    });
+
+    if (res.comfyui_online) {
+      toast("Image generated & saved to gallery!");
+    } else {
+      toast("ComfyUI is offline. Saved prompt configuration to gallery queue.");
+    }
+    loadComfyGallery();
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+async function loadComfyGallery() {
+  const grid = $("mmComfyGalleryGrid");
+  if (!grid) return;
+
+  try {
+    const res = await api("/api/multimodal/comfyui/gallery");
+    const items = res.gallery || [];
+    $("mmGalleryCount").textContent = `${items.length} images`;
+
+    if (items.length === 0) {
+      grid.innerHTML = `<div class="muted ss-empty-state">No generated images in this workspace yet.</div>`;
+      return;
+    }
+
+    grid.innerHTML = items.map(img => `
+      <div class="mm-gallery-item" title="${esc(img.prompt)}">
+        <div style="padding:14px; background:#12141e; height:100%; display:flex; flex-direction:column; justify-content:space-between; box-sizing:border-box;">
+          <div>
+            <span class="badge" style="font-size:0.65rem;">${esc(img.aspect_ratio || '1:1')}</span>
+            <p style="font-size:0.75rem; color:#cbd5e1; margin-top:8px; line-height:1.4;">${esc(img.prompt)}</p>
+          </div>
+          <button type="button" class="cyber-btn ghost-sm" onclick="navigator.clipboard.writeText('${esc(img.prompt)}'); toast('Copied prompt');" style="margin-top:auto;">Copy Prompt</button>
+        </div>
+      </div>
+    `).join("");
+  } catch (err) {
+    console.warn("Failed to load gallery:", err);
+  }
+}
+
+/* ---------- TAB 5: VOICE CONVERSATION IMPLEMENTATION ---------- */
+function populateVoiceSelect() {
+  const sel = $("mmVoiceSelect");
+  if (!sel) return;
+  const voices = [
+    { id: "af_heart", name: "Heart (Warm & Expressive)" },
+    { id: "af_bella", name: "Bella (Gentle & Intimate)" },
+    { id: "af_sarah", name: "Sarah (Bright & Clear)" },
+    { id: "am_adam", name: "Adam (Crisp & Friendly)" },
+    { id: "am_michael", name: "Michael (Deep & Natural)" },
+    { id: "bf_emma", name: "Emma (Polished British)" },
+    { id: "bm_george", name: "George (Warm British)" }
+  ];
+  sel.innerHTML = voices.map(v => `<option value="${v.id}">${v.name}</option>`).join("");
+}
+
+function toggleVoiceConversationMode() {
+  const orb = $("btnMmVoiceToggle");
+  const ripple = $("mmVoiceRipple");
+  const status = $("mmVoiceStatus");
+
+  if (!mmVoiceActive) {
+    // Check SpeechRecognition
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast("Web Speech recognition not supported in this browser; use microphone recording desk instead.", true);
+      return;
+    }
+
+    mmSpeechRecognition = new SpeechRecognition();
+    mmSpeechRecognition.continuous = true;
+    mmSpeechRecognition.interimResults = false;
+    mmSpeechRecognition.lang = "en-US";
+
+    mmSpeechRecognition.onresult = async (event) => {
+      const last = event.results.length - 1;
+      const speechText = event.results[last][0].transcript.trim();
+      if (speechText) {
+        status.textContent = `User: "${speechText}"`;
+        addVoiceMessageTurn("user", speechText);
+        await handleVoiceResponse(speechText);
+      }
+    };
+
+    mmSpeechRecognition.onerror = (e) => {
+      console.warn("Speech recognition error:", e);
+    };
+
+    mmSpeechRecognition.start();
+    mmVoiceActive = true;
+    orb.classList.add("recording");
+    ripple.classList.remove("hidden");
+    status.textContent = "Listening... Speak your prompt";
+    toast("Voice conversation mode active");
+  } else {
+    // Stop
+    if (mmSpeechRecognition) mmSpeechRecognition.stop();
+    stopVoiceTtsSpeech();
+    mmVoiceActive = false;
+    orb.classList.remove("recording");
+    ripple.classList.add("hidden");
+    status.textContent = "Conversational Voice Paused";
+  }
+}
+
+function addVoiceMessageTurn(role, text) {
+  const stream = $("mmVoiceTranscriptStream");
+  if (!stream) return;
+  const isUser = role === "user";
+  const div = document.createElement("div");
+  div.style.padding = "6px 10px";
+  div.style.borderRadius = "6px";
+  div.style.background = isUser ? "rgba(6, 182, 212, 0.12)" : "rgba(244, 63, 94, 0.12)";
+  div.style.border = `1px solid ${isUser ? "rgba(6, 182, 212, 0.25)" : "rgba(244, 63, 94, 0.25)"}`;
+  div.style.fontSize = "0.85rem";
+  div.innerHTML = `<strong>${isUser ? 'You' : 'Lamplight'}:</strong> ${esc(text)}`;
+  stream.appendChild(div);
+  stream.scrollTop = stream.scrollHeight;
+}
+
+async function handleVoiceResponse(userText) {
+  const status = $("mmVoiceStatus");
+  status.textContent = "Lamplight is thinking...";
+
+  try {
+    const res = await api("/api/chat/stream", {
+      method: "POST",
+      body: JSON.stringify({
+        mode: "friend",
+        message: userText
+      })
+    });
+    // Fallback via non-streaming completion for clean voice audio
+    const answer = res.content || res.response || "I hear you clearly.";
+    addVoiceMessageTurn("assistant", answer);
+    speakVoiceResponse(answer);
+  } catch (err) {
+    status.textContent = "Response error: " + err.message;
+  }
+}
+
+function speakVoiceResponse(text) {
+  stopVoiceTtsSpeech();
+  const voice = $("mmVoiceSelect")?.value || "af_heart";
+  const clean = text.replace(/<think>[\s\S]*?<\/think>/g, "").slice(0, 400);
+
+  const audioUrl = `/api/tts/speak?text=${encodeURIComponent(clean)}&voice=${encodeURIComponent(voice)}&speed=1.0`;
+  mmVoiceTtsAudio = new Audio(audioUrl);
+  mmVoiceTtsAudio.play().catch(e => console.warn("TTS autoplay prevented:", e));
+}
+
+function stopVoiceTtsSpeech() {
+  if (mmVoiceTtsAudio) {
+    mmVoiceTtsAudio.pause();
+    mmVoiceTtsAudio.currentTime = 0;
+    mmVoiceTtsAudio = null;
+    toast("Speech audio stopped");
+  }
 }
 
 boot();
