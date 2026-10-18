@@ -871,7 +871,7 @@ function showApp() {
   $("btnMemory").classList.toggle("hidden", mode !== "friend");
   if ($("btnArchitectStack")) $("btnArchitectStack").classList.toggle("hidden", mode !== "architect");
   if ($("btnMuseBible")) $("btnMuseBible").classList.toggle("hidden", mode !== "muse");
-  wireTabs(); moveGlow(); loadPicker(); loadHistory(); loadSessions(mode); loadVramStatus(); wireThemes(); loadSkills(); wireSkills(); wireTts(); loadTtsSettings(); initTranscriptModal(); wireCanvas(); wireLab(); wireArena(); wireProviderForm(); wireDocHub(); wireObservatory(); wirePrompts(); wireWorkbenchMenu(); wireArchitect(); wireMuse(); wireThinkingLevels(); wireModelCartridge(); wireWebSearch(); wireTreg(); wireWorkspaces(); loadWorkspaces(); wireMemoryCenter(); wireBackups(); wireDevWorkbench();
+  wireTabs(); moveGlow(); loadPicker(); loadHistory(); loadSessions(mode); loadVramStatus(); wireThemes(); loadSkills(); wireSkills(); wireTts(); loadTtsSettings(); initTranscriptModal(); wireCanvas(); wireLab(); wireArena(); wireProviderForm(); wireDocHub(); wireObservatory(); wirePrompts(); wireWorkbenchMenu(); wireArchitect(); wireMuse(); wireThinkingLevels(); wireModelCartridge(); wireWebSearch(); wireTreg(); wireWorkspaces(); loadWorkspaces(); wireMemoryCenter(); wireBackups(); wireDevWorkbench(); wireKnowledgeStudio();
 }
 
 document.addEventListener("click", (e) => {
@@ -7951,8 +7951,7 @@ function wireWorkbenchMenu() {
   $("wbItemDocs")?.addEventListener("click", () => {
     closeWorkbenchMenu();
     closeDrawers();
-    openDrawer("docHubPanel");
-    loadDocHub();
+    openKnowledgeStudio();
   });
 
   $("wbItemObservatory")?.addEventListener("click", () => {
@@ -9187,6 +9186,854 @@ async function loadDevBackups() {
     });
   } catch (err) {
     list.innerHTML = `<div class="muted" style="padding:14px;color:#f87171;font-size:0.75rem;">Failed to load snapshots: ${esc(err.message)}</div>`;
+  }
+}
+
+/* ==========================================================================
+   Phase 4: Local Knowledge Library, Reading Desk & Personal Learning Studio
+   ========================================================================== */
+
+let kStudioActiveTab = "library";
+let kStudioDocs = [];
+let kStudioSources = [];
+let kStudioNotes = [];
+let kStudyDecks = [];
+let kStudyCards = [];
+let kStudyCurrentCardIdx = 0;
+let kActiveReadingDoc = null;
+let kSelectedPassage = "";
+let kSelectedContext = "";
+let kReaderFontSize = 0.94;
+let kSearchDebounceTimer = null;
+let kProgressSaveDebounceTimer = null;
+
+function wireKnowledgeStudio() {
+  const modal = $("knowledgeStudioModal");
+  if (!modal) return;
+
+  $("btnCloseKnowledgeModal")?.addEventListener("click", () => modal.classList.add("hidden"));
+  $("btnDismissKnowledgeModal")?.addEventListener("click", () => modal.classList.add("hidden"));
+  $("btnSyncKnowledgeSources")?.addEventListener("click", () => syncAllKnowledgeSources());
+
+  // Tab switching
+  document.querySelectorAll(".k-tab").forEach(tabBtn => {
+    tabBtn.addEventListener("click", () => {
+      document.querySelectorAll(".k-tab").forEach(t => t.classList.remove("active"));
+      tabBtn.classList.add("active");
+      const tabName = tabBtn.getAttribute("data-tab");
+      kStudioActiveTab = tabName;
+
+      document.querySelectorAll(".k-pane").forEach(p => p.classList.remove("active"));
+      const paneId = `kPane${tabName.charAt(0).toUpperCase() + tabName.slice(1)}`;
+      const targetPane = $(paneId);
+      if (targetPane) targetPane.classList.add("active");
+
+      if (tabName === "library") {
+        loadKnowledgeLibrary();
+      } else if (tabName === "reader") {
+        if (!kActiveReadingDoc && kStudioDocs.length) {
+          openInReadingDesk(kStudioDocs[0].id);
+        }
+      } else if (tabName === "notes") {
+        loadResearchNotes();
+      } else if (tabName === "study") {
+        loadStudyStudio();
+      }
+    });
+  });
+
+  // Watch folder form toggle
+  $("btnToggleWatchFolderForm")?.addEventListener("click", () => {
+    const f = $("kAddWatchFolderForm");
+    if (f) f.classList.toggle("hidden");
+  });
+
+  // Save watch folder
+  $("btnSaveWatchFolder")?.addEventListener("click", () => addWatchFolderFromForm());
+
+  // FTS5 instant search
+  const searchInput = $("kSearchInput");
+  const clearSearchBtn = $("kBtnClearSearch");
+  if (searchInput) {
+    searchInput.addEventListener("input", (e) => {
+      const q = e.target.value.trim();
+      clearSearchBtn?.classList.toggle("hidden", !q);
+      clearTimeout(kSearchDebounceTimer);
+      kSearchDebounceTimer = setTimeout(() => {
+        if (q) searchKnowledgeFts(q);
+        else renderKnowledgeDocs(kStudioDocs);
+      }, 250);
+    });
+  }
+
+  clearSearchBtn?.addEventListener("click", () => {
+    if (searchInput) searchInput.value = "";
+    clearSearchBtn.classList.add("hidden");
+    renderKnowledgeDocs(kStudioDocs);
+  });
+
+  // Reading Desk Doc Picker
+  $("kReaderDocSelect")?.addEventListener("change", (e) => {
+    const docId = e.target.value;
+    if (docId) openInReadingDesk(docId);
+  });
+
+  // Reading Desk Typography toggles
+  document.querySelectorAll(".k-typo-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".k-typo-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      const font = btn.getAttribute("data-font");
+      const article = $("kReaderContent");
+      if (article) {
+        article.classList.remove("font-sans", "font-serif", "font-mono");
+        article.classList.add(`font-${font}`);
+      }
+    });
+  });
+
+  $("btnReaderFontInc")?.addEventListener("click", () => {
+    kReaderFontSize = Math.min(1.4, kReaderFontSize + 0.06);
+    const article = $("kReaderContent");
+    if (article) article.style.fontSize = `${kReaderFontSize}rem`;
+  });
+
+  $("btnReaderFontDec")?.addEventListener("click", () => {
+    kReaderFontSize = Math.max(0.75, kReaderFontSize - 0.06);
+    const article = $("kReaderContent");
+    if (article) article.style.fontSize = `${kReaderFontSize}rem`;
+  });
+
+  // Reader Themes
+  document.querySelectorAll(".k-theme-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".k-theme-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      const theme = btn.getAttribute("data-theme");
+      const article = $("kReaderContent");
+      if (article) {
+        article.classList.remove("theme-dark", "theme-sepia", "theme-oled");
+        article.classList.add(`theme-${theme}`);
+      }
+    });
+  });
+
+  // Reading Scroll Progress Listener
+  const viewport = document.querySelector(".k-reader-viewport");
+  if (viewport) {
+    viewport.addEventListener("scroll", () => {
+      const total = viewport.scrollHeight - viewport.clientHeight;
+      if (total > 0 && kActiveReadingDoc) {
+        const pct = Math.min(100, Math.max(0, Math.round((viewport.scrollTop / total) * 100)));
+        const bar = $("kReaderProgressBar");
+        const lbl = $("kReaderProgressLabel");
+        if (bar) bar.style.width = `${pct}%`;
+        if (lbl) lbl.textContent = `${pct}%`;
+
+        clearTimeout(kProgressSaveDebounceTimer);
+        kProgressSaveDebounceTimer = setTimeout(() => {
+          api(`/api/knowledge/reading/${kActiveReadingDoc.id}/progress`, {
+            method: "POST",
+            body: JSON.stringify({
+              progress_pct: pct,
+              workspace_id: activeWorkspaceId
+            })
+          }).catch(() => null);
+        }, 800);
+      }
+    });
+  }
+
+  // Text selection listener for Floating Passage Popover
+  const articleEl = $("kReaderContent");
+  if (articleEl) {
+    articleEl.addEventListener("mouseup", () => handlePassageSelection());
+    articleEl.addEventListener("touchend", () => handlePassageSelection());
+  }
+
+  // Popover Actions
+  $("btnPopoverExplain")?.addEventListener("click", () => explainPassageWithAi());
+  $("btnPopoverNote")?.addEventListener("click", () => savePassageToResearchNotes());
+  $("btnPopoverChat")?.addEventListener("click", () => queryPassageInChat());
+  $("btnCloseCompanion")?.addEventListener("click", () => $("kCompanionDrawer")?.classList.add("hidden"));
+
+  // Research Notes
+  $("btnManualAddNote")?.addEventListener("click", () => $("kAddNoteForm")?.classList.toggle("hidden"));
+  $("btnSaveManualNote")?.addEventListener("click", () => saveManualResearchNote());
+  $("btnExportNotesMd")?.addEventListener("click", () => exportResearchNotes());
+  $("kNotesSearch")?.addEventListener("input", (e) => filterResearchNotes(e.target.value.toLowerCase()));
+
+  // Learning Studio (SM-2 Flashcards)
+  $("btnCreateFlashcardManual")?.addEventListener("click", () => $("kAddCardForm")?.classList.toggle("hidden"));
+  $("btnSaveCardManual")?.addEventListener("click", () => saveManualFlashcard());
+  $("kStudyDeckSelect")?.addEventListener("change", (e) => loadDeckCards(e.target.value));
+
+  const flipCardBox = $("kStudyCardBox");
+  if (flipCardBox) {
+    flipCardBox.addEventListener("click", () => flipStudyCard());
+  }
+
+  document.querySelectorAll(".sm2-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const rating = parseInt(btn.getAttribute("data-rating") || "3", 10);
+      submitSm2Review(rating);
+    });
+  });
+
+  // Spacebar to flip card when in study tab
+  document.addEventListener("keydown", (e) => {
+    if (kStudioActiveTab === "study" && !$("knowledgeStudioModal")?.classList.contains("hidden")) {
+      if (e.code === "Space" && !["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName)) {
+        e.preventDefault();
+        flipStudyCard();
+      }
+    }
+  });
+}
+
+function openKnowledgeStudio(initialTab = "library") {
+  const modal = $("knowledgeStudioModal");
+  if (!modal) return;
+  modal.classList.remove("hidden");
+
+  const badge = $("kStudioWsBadge");
+  if (badge) {
+    const wsName = allCachedWorkspaces?.find(w => w.id === activeWorkspaceId)?.name || "Default";
+    badge.textContent = `Workspace: ${wsName}`;
+  }
+
+  // Activate requested tab
+  const tabBtn = document.querySelector(`.k-tab[data-tab="${initialTab}"]`);
+  if (tabBtn) tabBtn.click();
+  else loadKnowledgeLibrary();
+}
+
+async function loadKnowledgeLibrary() {
+  const wsParam = activeWorkspaceId ? `?workspace_id=${encodeURIComponent(activeWorkspaceId)}` : "";
+  try {
+    const [sourcesRes, docsRes] = await Promise.all([
+      api(`/api/knowledge/sources${wsParam}`).catch(() => ({ sources: [] })),
+      api(`/api/knowledge/documents${wsParam}`).catch(() => ({ documents: [] }))
+    ]);
+
+    kStudioSources = sourcesRes.sources || [];
+    kStudioDocs = docsRes.documents || [];
+
+    renderWatchedSources(kStudioSources);
+    renderKnowledgeDocs(kStudioDocs);
+    populateReaderSelect(kStudioDocs);
+  } catch (err) {
+    console.error("loadKnowledgeLibrary error:", err);
+  }
+}
+
+function renderWatchedSources(sources) {
+  const listEl = $("kSourcesList");
+  const countBadge = $("kWatchCountBadge");
+  if (!listEl) return;
+  if (countBadge) countBadge.textContent = sources.length;
+
+  if (!sources.length) {
+    listEl.innerHTML = '<div class="muted" style="padding:16px;text-align:center;font-size:0.75rem;">No watch folders configured. Add a local directory to automatically index its documents.</div>';
+    return;
+  }
+
+  listEl.innerHTML = sources.map(s => `
+    <div class="k-source-item">
+      <div class="k-source-info">
+        <span class="k-source-name">📁 ${esc(s.name)}</span>
+        <span class="k-source-path" title="${esc(s.folder_path)}">${esc(s.folder_path)}</span>
+        <span class="muted" style="font-size:0.68rem;">${s.file_count || 0} files · Synced ${timeAgo(s.last_scanned_at)}</span>
+      </div>
+      <div class="k-source-actions">
+        <button type="button" class="ghost-xs" onclick="syncSingleWatchSource('${s.id}')" title="Sync Folder">🔄</button>
+        <button type="button" class="ghost-xs danger" onclick="removeWatchSource('${s.id}')" title="Remove Folder">✕</button>
+      </div>
+    </div>
+  `).join("");
+}
+
+function renderKnowledgeDocs(docs) {
+  const container = $("kDocsContainer");
+  const countEl = $("kDocsCount");
+  const titleEl = $("kDocsHeaderTitle");
+  if (!container) return;
+
+  if (titleEl) titleEl.textContent = "Indexed Knowledge Documents";
+  if (countEl) countEl.textContent = `${docs.length} document${docs.length === 1 ? "" : "s"}`;
+
+  if (!docs.length) {
+    container.innerHTML = '<div class="muted" style="padding:32px;text-align:center;font-size:0.8rem;">No documents found in knowledge base. Add a watch folder above or upload documents to get started.</div>';
+    return;
+  }
+
+  container.innerHTML = docs.map(d => {
+    const type = (d.file_type || "TXT").toUpperCase();
+    const sizeKb = Math.round((d.file_size || 0) / 1024);
+    const pages = d.page_count ? ` · ${d.page_count} pgs` : "";
+
+    return `
+      <div class="k-doc-card">
+        <div class="k-doc-info-wrap">
+          <span class="k-doc-type-badge k-badge-${esc(type)}">${esc(type)}</span>
+          <div class="k-doc-details">
+            <span class="k-doc-title" title="${esc(d.title || d.filename)}">${esc(d.title || d.filename)}</span>
+            <span class="k-doc-meta">${sizeKb} KB${pages} · ${esc(d.filename)}</span>
+          </div>
+        </div>
+        <div class="k-doc-actions">
+          <button type="button" class="cyber-btn primary-cyan ghost-xs" onclick="openInReadingDesk('${d.id}')">📖 Read</button>
+          <button type="button" class="cyber-btn ghost-xs" onclick="chatWithKnowledgeDoc('${d.id}', '${esc(d.title || d.filename)}')">💬 Chat</button>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+async function searchKnowledgeFts(query) {
+  const container = $("kDocsContainer");
+  const titleEl = $("kDocsHeaderTitle");
+  const countEl = $("kDocsCount");
+  if (!container) return;
+
+  if (titleEl) titleEl.textContent = `Search Results for "${query}"`;
+  const wsParam = activeWorkspaceId ? `&workspace_id=${encodeURIComponent(activeWorkspaceId)}` : "";
+
+  try {
+    const j = await api(`/api/knowledge/search?q=${encodeURIComponent(query)}${wsParam}`);
+    const results = j.results || [];
+    if (countEl) countEl.textContent = `${results.length} match${results.length === 1 ? "" : "es"}`;
+
+    if (!results.length) {
+      container.innerHTML = `<div class="muted" style="padding:32px;text-align:center;font-size:0.8rem;">No passages matched "${esc(query)}". Try another keyword or phrase.</div>`;
+      return;
+    }
+
+    container.innerHTML = results.map(r => `
+      <div class="k-search-snippet-card">
+        <div class="k-search-snippet-head">
+          <span class="k-doc-title">${esc(r.title || r.filename)}</span>
+          <button type="button" class="cyber-btn ghost-xs" onclick="openInReadingDesk('${r.id}')">Open in Reader ➔</button>
+        </div>
+        <div class="k-search-snippet-body">${r.snippet || ""}</div>
+      </div>
+    `).join("");
+  } catch (err) {
+    container.innerHTML = `<div class="muted" style="padding:24px;color:#f87171;">Search error: ${esc(err.message)}</div>`;
+  }
+}
+
+async function addWatchFolderFromForm() {
+  const pathInput = $("kWatchFolderPath");
+  const nameInput = $("kWatchFolderName");
+  const folderPath = pathInput?.value.trim();
+  const name = nameInput?.value.trim() || "";
+
+  if (!folderPath) {
+    toast("Please enter folder path.", true);
+    return;
+  }
+
+  toast("Indexing watch folder…");
+  try {
+    await api("/api/knowledge/sources", {
+      method: "POST",
+      body: JSON.stringify({
+        folder_path: folderPath,
+        name: name,
+        workspace_id: activeWorkspaceId,
+        recursive: true
+      })
+    });
+
+    toast("Watch folder added and indexed!");
+    if (pathInput) pathInput.value = "";
+    if (nameInput) nameInput.value = "";
+    $("kAddWatchFolderForm")?.classList.add("hidden");
+    loadKnowledgeLibrary();
+  } catch (err) {
+    toast("Failed to add watch folder: " + err.message, true);
+  }
+}
+
+async function syncSingleWatchSource(sourceId) {
+  toast("Syncing folder…");
+  try {
+    const r = await api("/api/knowledge/sync", {
+      method: "POST",
+      body: JSON.stringify({ source_id: sourceId })
+    });
+    toast(`Sync finished: ${r.result?.added || 0} added, ${r.result?.updated || 0} updated.`);
+    loadKnowledgeLibrary();
+  } catch (err) {
+    toast("Sync failed: " + err.message, true);
+  }
+}
+
+async function syncAllKnowledgeSources() {
+  toast("Scanning and syncing all watch folders…");
+  try {
+    await api("/api/knowledge/sync", {
+      method: "POST",
+      body: JSON.stringify({ workspace_id: activeWorkspaceId })
+    });
+    toast("All watch folders synced!");
+    loadKnowledgeLibrary();
+  } catch (err) {
+    toast("Sync failed: " + err.message, true);
+  }
+}
+
+async function removeWatchSource(sourceId) {
+  const ok = await askConfirm("Remove this watch folder and prune its indexed files?");
+  if (!ok) return;
+  try {
+    await api(`/api/knowledge/sources/${encodeURIComponent(sourceId)}`, { method: "DELETE" });
+    toast("Watch folder removed.");
+    loadKnowledgeLibrary();
+  } catch (err) {
+    toast("Failed to remove: " + err.message, true);
+  }
+}
+
+function populateReaderSelect(docs) {
+  const sel = $("kReaderDocSelect");
+  if (!sel) return;
+  if (!docs.length) {
+    sel.innerHTML = '<option value="">No documents in library</option>';
+    return;
+  }
+  sel.innerHTML = docs.map(d => `<option value="${d.id}">${esc(d.title || d.filename)} (${d.file_type})</option>`).join("");
+}
+
+async function openInReadingDesk(docId) {
+  const tabBtn = document.querySelector('.k-tab[data-tab="reader"]');
+  if (tabBtn && !tabBtn.classList.contains("active")) {
+    tabBtn.click();
+  }
+
+  const sel = $("kReaderDocSelect");
+  if (sel && sel.value !== docId) sel.value = docId;
+
+  const contentEl = $("kReaderContent");
+  const tocList = $("kReaderTocList");
+  if (contentEl) contentEl.innerHTML = '<div class="muted" style="padding:40px;text-align:center;">Loading document for reading…</div>';
+
+  try {
+    const j = await api(`/api/knowledge/reading/${encodeURIComponent(docId)}`);
+    const doc = j.document;
+    if (!doc) return;
+    kActiveReadingDoc = doc;
+
+    // Render TOC
+    if (tocList) {
+      const chapters = doc.chapters || [];
+      if (chapters.length) {
+        tocList.innerHTML = chapters.map((ch, idx) => `
+          <button type="button" class="k-toc-item" onclick="jumpToChapter(${idx + 1})">
+            ${esc(ch.title || `Chapter ${idx + 1}`)}
+          </button>
+        `).join("");
+      } else {
+        tocList.innerHTML = '<div class="muted" style="font-size:0.72rem;padding:8px;">Continuous document</div>';
+      }
+    }
+
+    // Render formatted reader content
+    const text = doc.text_content || "(No extractable text)";
+    const htmlText = marked.parse(text);
+    if (contentEl) {
+      contentEl.innerHTML = `
+        <h1 style="margin-bottom:6px;">${esc(doc.title || doc.filename)}</h1>
+        <div class="muted" style="font-size:0.75rem;margin-bottom:24px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.06);">
+          ${doc.file_type} · ${Math.round(doc.file_size / 1024)} KB · ${doc.page_count || 1} pages
+        </div>
+        <div class="k-reader-prose">${htmlText}</div>
+      `;
+    }
+
+    // Restore reading progress
+    const pct = doc.progress?.progress_pct || 0;
+    const bar = $("kReaderProgressBar");
+    const lbl = $("kReaderProgressLabel");
+    if (bar) bar.style.width = `${pct}%`;
+    if (lbl) lbl.textContent = `${pct}%`;
+
+    const viewport = document.querySelector(".k-reader-viewport");
+    if (viewport && pct > 0) {
+      setTimeout(() => {
+        const total = viewport.scrollHeight - viewport.clientHeight;
+        viewport.scrollTop = (total * pct) / 100;
+      }, 100);
+    }
+  } catch (err) {
+    if (contentEl) contentEl.innerHTML = `<div class="muted" style="padding:40px;color:#f87171;">Failed to load book: ${esc(err.message)}</div>`;
+  }
+}
+
+function handlePassageSelection() {
+  const selection = window.getSelection();
+  const popover = $("kPassagePopover");
+  if (!popover) return;
+
+  const text = selection?.toString().trim();
+  if (!text || text.length < 5) {
+    popover.classList.add("hidden");
+    return;
+  }
+
+  kSelectedPassage = text;
+  const range = selection.getRangeAt(0);
+  const container = range.commonAncestorContainer;
+  kSelectedContext = container.textContent || text;
+
+  const rect = range.getBoundingClientRect();
+  popover.style.top = `${Math.max(10, rect.top - 46)}px`;
+  popover.style.left = `${Math.max(10, rect.left + (rect.width / 2) - 130)}px`;
+  popover.classList.remove("hidden");
+}
+
+async function explainPassageWithAi() {
+  $("kPassagePopover")?.classList.add("hidden");
+  const companionDrawer = $("kCompanionDrawer");
+  const textEl = $("kCompanionText");
+  if (companionDrawer && textEl) {
+    companionDrawer.classList.remove("hidden");
+    textEl.textContent = "AI Reading Companion is analyzing the selected passage in context…";
+
+    try {
+      const docId = kActiveReadingDoc?.id || "";
+      const res = await api(`/api/knowledge/reading/${docId}/ask`, {
+        method: "POST",
+        body: JSON.stringify({
+          passage: kSelectedPassage,
+          context: kSelectedContext,
+          question: "Explain this passage clearly, highlighting core concepts and nuances."
+        })
+      });
+      textEl.innerHTML = marked.parse(res.explanation || "No explanation generated.");
+    } catch (err) {
+      textEl.textContent = "Explanation failed: " + err.message;
+    }
+  }
+}
+
+async function savePassageToResearchNotes() {
+  $("kPassagePopover")?.classList.add("hidden");
+  const userNote = prompt("Add a note / observation for this passage (optional):", "");
+  if (userNote === null) return;
+
+  try {
+    await api("/api/knowledge/notes", {
+      method: "POST",
+      body: JSON.stringify({
+        workspace_id: activeWorkspaceId,
+        doc_id: kActiveReadingDoc?.id,
+        doc_title: kActiveReadingDoc?.title || kActiveReadingDoc?.filename,
+        passage: kSelectedPassage,
+        note: userNote || "",
+        tags: "reading,highlight"
+      })
+    });
+    toast("Saved passage to Research Notebook! ✓");
+  } catch (err) {
+    toast("Failed to save note: " + err.message, true);
+  }
+}
+
+function queryPassageInChat() {
+  $("kPassagePopover")?.classList.add("hidden");
+  const modal = $("knowledgeStudioModal");
+  if (modal) modal.classList.add("hidden");
+
+  const msgInput = $("msg");
+  if (msgInput) {
+    const docName = kActiveReadingDoc?.title || "the document";
+    msgInput.value = `In "${docName}", I was reading this passage: "${kSelectedPassage}". What are the deeper implications of this?`;
+    msgInput.focus();
+  }
+}
+
+function chatWithKnowledgeDoc(docId, docTitle) {
+  const modal = $("knowledgeStudioModal");
+  if (modal) modal.classList.add("hidden");
+
+  const msgInput = $("msg");
+  if (msgInput) {
+    msgInput.value = `Please analyze document "${docTitle}" and summarize its principal thesis and conclusions: `;
+    msgInput.focus();
+  }
+}
+
+/* ---------- Research Notebook ---------- */
+
+async function loadResearchNotes() {
+  const feed = $("kNotesList");
+  if (!feed) return;
+  feed.innerHTML = '<div class="muted" style="padding:24px;text-align:center;">Loading notes…</div>';
+
+  const wsParam = activeWorkspaceId ? `?workspace_id=${encodeURIComponent(activeWorkspaceId)}` : "";
+  try {
+    const j = await api(`/api/knowledge/notes${wsParam}`);
+    kStudioNotes = j.notes || [];
+    renderResearchNotes(kStudioNotes);
+  } catch (err) {
+    feed.innerHTML = `<div class="muted" style="padding:24px;color:#f87171;">Failed to load notes: ${esc(err.message)}</div>`;
+  }
+}
+
+function renderResearchNotes(notes) {
+  const feed = $("kNotesList");
+  if (!feed) return;
+
+  if (!notes.length) {
+    feed.innerHTML = '<div class="muted" style="padding:32px;text-align:center;font-size:0.8rem;">No research notes yet. Highlight passages in the Reading Desk or click "+ New Note" above.</div>';
+    return;
+  }
+
+  feed.innerHTML = notes.map(n => {
+    const tags = (n.tags || "").split(",").map(t => t.trim()).filter(Boolean);
+    const tagHtml = tags.map(t => `<span class="k-tag-pill">#${esc(t)}</span>`).join(" ");
+
+    return `
+      <div class="k-note-card">
+        <div class="k-note-quote">"${esc(n.passage)}"</div>
+        ${n.note ? `<div class="k-note-comment">${esc(n.note)}</div>` : ""}
+        <div class="k-note-footer">
+          <div class="k-note-tags">
+            <strong>${esc(n.doc_title || "General Note")}</strong>
+            ${n.citation ? `<span class="muted">(${esc(n.citation)})</span>` : ""}
+            ${tagHtml}
+          </div>
+          <div>
+            <span class="muted">${new Date(n.created_at).toLocaleDateString()}</span>
+            <button type="button" class="ghost-xs danger" onclick="deleteResearchNote('${n.id}')" title="Delete note">✕</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function filterResearchNotes(query) {
+  if (!query) {
+    renderResearchNotes(kStudioNotes);
+    return;
+  }
+  const filtered = kStudioNotes.filter(n =>
+    (n.passage || "").toLowerCase().includes(query) ||
+    (n.note || "").toLowerCase().includes(query) ||
+    (n.doc_title || "").toLowerCase().includes(query) ||
+    (n.tags || "").toLowerCase().includes(query)
+  );
+  renderResearchNotes(filtered);
+}
+
+async function saveManualResearchNote() {
+  const passageInput = $("kNotePassageInput");
+  const textInput = $("kNoteTextInput");
+  const tagsInput = $("kNoteTagsInput");
+  const citationInput = $("kNoteCitationInput");
+
+  const passage = passageInput?.value.trim();
+  if (!passage) {
+    toast("Please enter passage or concept.", true);
+    return;
+  }
+
+  try {
+    await api("/api/knowledge/notes", {
+      method: "POST",
+      body: JSON.stringify({
+        workspace_id: activeWorkspaceId,
+        doc_title: "Manual Research Note",
+        passage: passage,
+        note: textInput?.value.trim() || "",
+        tags: tagsInput?.value.trim() || "",
+        citation: citationInput?.value.trim() || ""
+      })
+    });
+    toast("Research note saved! ✓");
+    if (passageInput) passageInput.value = "";
+    if (textInput) textInput.value = "";
+    $("kAddNoteForm")?.classList.add("hidden");
+    loadResearchNotes();
+  } catch (err) {
+    toast("Failed to save note: " + err.message, true);
+  }
+}
+
+async function deleteResearchNote(noteId) {
+  const ok = await askConfirm("Delete this research note?");
+  if (!ok) return;
+  try {
+    await api(`/api/knowledge/notes/${encodeURIComponent(noteId)}`, { method: "DELETE" });
+    toast("Note deleted.");
+    loadResearchNotes();
+  } catch (err) {
+    toast("Failed to delete note: " + err.message, true);
+  }
+}
+
+async function exportResearchNotes() {
+  const wsParam = activeWorkspaceId ? `?workspace_id=${encodeURIComponent(activeWorkspaceId)}` : "";
+  try {
+    const j = await api(`/api/knowledge/notes/export${wsParam}`);
+    const md = j.markdown || "# Research Notes\n";
+    const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `research_notes_${activeWorkspaceId || "default"}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast("Research notebook exported to Markdown! ✓");
+  } catch (err) {
+    toast("Export failed: " + err.message, true);
+  }
+}
+
+/* ---------- Learning Studio & Spaced Repetition (SM-2) ---------- */
+
+async function loadStudyStudio() {
+  const wsParam = activeWorkspaceId ? `?workspace_id=${encodeURIComponent(activeWorkspaceId)}` : "";
+  try {
+    const [decksRes, cardsRes] = await Promise.all([
+      api(`/api/study/decks${wsParam}`).catch(() => ({ decks: [] })),
+      api(`/api/study/flashcards${wsParam}`).catch(() => ({ flashcards: [] }))
+    ]);
+
+    kStudyDecks = decksRes.decks || [];
+    kStudyCards = cardsRes.flashcards || [];
+    kStudyCurrentCardIdx = 0;
+
+    populateStudyDecks(kStudyDecks);
+    renderCurrentStudyCard();
+  } catch (err) {
+    console.error("loadStudyStudio error:", err);
+  }
+}
+
+function populateStudyDecks(decks) {
+  const sel = $("kStudyDeckSelect");
+  if (!sel) return;
+  if (!decks.length) {
+    sel.innerHTML = '<option value="">All Cards</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">All Decks</option>' + decks.map(d => `
+    <option value="${d.deck_id}">${esc(d.deck_title)} (${d.due_cards || 0} due / ${d.total_cards} cards)</option>
+  `).join("");
+}
+
+async function loadDeckCards(deckId) {
+  const wsParam = activeWorkspaceId ? `&workspace_id=${encodeURIComponent(activeWorkspaceId)}` : "";
+  const deckParam = deckId ? `?deck_id=${encodeURIComponent(deckId)}` : "?";
+  try {
+    const j = await api(`/api/study/flashcards${deckParam}${wsParam}`);
+    kStudyCards = j.flashcards || [];
+    kStudyCurrentCardIdx = 0;
+    renderCurrentStudyCard();
+  } catch (err) {
+    console.error("loadDeckCards error:", err);
+  }
+}
+
+function renderCurrentStudyCard() {
+  const box = $("kStudyCardBox");
+  const frontEl = $("kCardFrontContent");
+  const backEl = $("kCardBackContent");
+  const counterEl = $("kCardCounter");
+  const buttonBar = $("kSm2ButtonBar");
+  const dueBadge = $("kDeckDueBadge");
+
+  if (box) box.classList.remove("flipped");
+  if (buttonBar) buttonBar.classList.add("hidden");
+
+  if (!kStudyCards.length) {
+    if (frontEl) frontEl.textContent = "No flashcards in this deck yet. Create a card with '+ Add Card' above.";
+    if (backEl) backEl.textContent = "";
+    if (counterEl) counterEl.textContent = "Deck complete!";
+    if (dueBadge) dueBadge.textContent = "0 due";
+    return;
+  }
+
+  if (kStudyCurrentCardIdx >= kStudyCards.length) {
+    if (frontEl) frontEl.textContent = "🎉 Study Session Complete! All cards reviewed for today.";
+    if (backEl) backEl.textContent = "Great job! Check back tomorrow for your next spaced review.";
+    if (counterEl) counterEl.textContent = `${kStudyCards.length} of ${kStudyCards.length} reviewed`;
+    return;
+  }
+
+  const card = kStudyCards[kStudyCurrentCardIdx];
+  if (frontEl) frontEl.textContent = card.front;
+  if (backEl) backEl.textContent = card.back;
+  if (counterEl) counterEl.textContent = `Card ${kStudyCurrentCardIdx + 1} of ${kStudyCards.length}`;
+}
+
+function flipStudyCard() {
+  if (!kStudyCards.length || kStudyCurrentCardIdx >= kStudyCards.length) return;
+  const box = $("kStudyCardBox");
+  const buttonBar = $("kSm2ButtonBar");
+  if (box) {
+    const isFlipped = box.classList.toggle("flipped");
+    if (buttonBar) buttonBar.classList.toggle("hidden", !isFlipped);
+  }
+}
+
+async function submitSm2Review(rating) {
+  if (!kStudyCards.length || kStudyCurrentCardIdx >= kStudyCards.length) return;
+  const card = kStudyCards[kStudyCurrentCardIdx];
+
+  try {
+    const res = await api(`/api/study/flashcards/${encodeURIComponent(card.id)}/review`, {
+      method: "POST",
+      body: JSON.stringify({ rating: rating })
+    });
+
+    const nextDays = res.result?.interval_days || 1;
+    toast(`Reviewed: Next review in ${nextDays} day${nextDays === 1 ? "" : "s"}.`);
+
+    kStudyCurrentCardIdx++;
+    renderCurrentStudyCard();
+  } catch (err) {
+    toast("Review update failed: " + err.message, true);
+  }
+}
+
+async function saveManualFlashcard() {
+  const frontInput = $("kCardFrontInput");
+  const backInput = $("kCardBackInput");
+  const front = frontInput?.value.trim();
+  const back = backInput?.value.trim();
+
+  if (!front || !back) {
+    toast("Please enter both front question and back answer.", true);
+    return;
+  }
+
+  const deckSel = $("kStudyDeckSelect");
+  const deckId = deckSel?.value || "deck_general";
+  const deckTitle = deckSel?.selectedOptions[0]?.text?.split(" (")[0] || "General Knowledge";
+
+  try {
+    await api("/api/study/flashcards", {
+      method: "POST",
+      body: JSON.stringify({
+        deck_id: deckId,
+        deck_title: deckTitle,
+        workspace_id: activeWorkspaceId,
+        front: front,
+        back: back
+      })
+    });
+    toast("Flashcard created! ✓");
+    if (frontInput) frontInput.value = "";
+    if (backInput) backInput.value = "";
+    $("kAddCardForm")?.classList.add("hidden");
+    loadStudyStudio();
+  } catch (err) {
+    toast("Failed to save flashcard: " + err.message, true);
   }
 }
 

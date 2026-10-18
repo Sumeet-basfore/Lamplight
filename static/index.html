@@ -245,10 +245,10 @@
               </span>
               <div class="wb-item-info">
                 <div class="wb-item-title-row">
-                  <strong>Document Hub</strong>
-                  <span class="wb-badge wb-badge-emerald">STUDY LAB</span>
+                  <strong>Knowledge Studio</strong>
+                  <span class="wb-badge wb-badge-emerald">FTS5 &amp; READER</span>
                 </div>
-                <span>Multi-PDF knowledge base, flashcards &amp; quizzes</span>
+                <span>Watch folders, Reading Desk, research notes &amp; SM-2 study</span>
               </div>
             </button>
             <button class="workbench-menu-item" type="button" id="wbItemDevWorkbench">
@@ -2792,6 +2792,282 @@
   </div>
 </div>
 
+<!-- Knowledge Studio & Reading Desk Modal -->
+<div id="knowledgeStudioModal" class="veil hidden">
+  <div class="veil-card k-modal-card">
+    <div class="modal-head">
+      <div class="k-modal-head-title">
+        <div class="k-title-row">
+          <h3>Knowledge Studio &amp; Reading Desk</h3>
+          <span class="wb-badge wb-badge-emerald">FTS5 FULL-TEXT &amp; SM-2 STUDY</span>
+          <span id="kStudioWsBadge" class="wb-badge wb-badge-purple">Workspace: Default</span>
+        </div>
+        <div class="k-sub-row">
+          <span class="muted" style="font-size:0.75rem;">Local watch folders, distraction-free reader, sourced research notes &amp; spaced repetition</span>
+        </div>
+      </div>
+      <div class="modal-head-actions">
+        <button id="btnSyncKnowledgeSources" class="cyber-btn primary-cyan" type="button" title="Scan and re-index all watched folders">🔄 Sync Folders</button>
+        <button id="btnCloseKnowledgeModal" class="ghost-xs" type="button">✕</button>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="dev-tabs k-tabs">
+      <button class="dev-tab k-tab active" data-tab="library" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M6 6h10M6 10h10M6 14h6"/></svg>
+        Library &amp; Watch Folders
+      </button>
+      <button class="dev-tab k-tab" data-tab="reader" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        Reading Desk
+      </button>
+      <button class="dev-tab k-tab" data-tab="notes" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        Research Notebook
+      </button>
+      <button class="dev-tab k-tab" data-tab="study" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+        Learning Studio (SM-2)
+      </button>
+    </div>
+
+    <!-- Body Panes -->
+    <div class="dev-body k-body">
+      <!-- Pane 1: Library & Watch Folders -->
+      <div id="kPaneLibrary" class="dev-pane k-pane active">
+        <div class="k-lib-toolbar">
+          <div class="k-search-box flex-1">
+            <span class="k-search-icon">🔍</span>
+            <input type="text" id="kSearchInput" placeholder="Instant FTS5 full-text search across all documents &amp; books…" class="cyber-input-field">
+            <button type="button" id="kBtnClearSearch" class="ghost-xs hidden">✕</button>
+          </div>
+          <button type="button" id="btnToggleWatchFolderForm" class="cyber-btn primary-emerald">
+            <span>+ Add Watch Folder</span>
+          </button>
+        </div>
+
+        <!-- Add Watch Folder Form -->
+        <div id="kAddWatchFolderForm" class="k-folder-form hidden">
+          <div class="k-form-row">
+            <div class="form-group flex-1">
+              <label>Folder Absolute Path:</label>
+              <input type="text" id="kWatchFolderPath" placeholder="/home/sumeet/ChatBots/books or ~/Documents/Research" class="cyber-input-field">
+            </div>
+            <div class="form-group" style="width:200px;">
+              <label>Folder Label / Nickname:</label>
+              <input type="text" id="kWatchFolderName" placeholder="e.g. AI Research Papers" class="cyber-input-field">
+            </div>
+            <div class="form-group" style="align-self:flex-end;">
+              <button type="button" id="btnSaveWatchFolder" class="cyber-btn primary-cyan">Watch &amp; Index</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="dev-split-view">
+          <!-- Watched Folders List -->
+          <div class="dev-sidebar k-sidebar">
+            <div class="dev-section-title">
+              <span>Watched Folders</span>
+              <span id="kWatchCountBadge" class="dev-counter-badge">0</span>
+            </div>
+            <div id="kSourcesList" class="k-sources-list">
+              <!-- Dynamically populated sources -->
+            </div>
+          </div>
+
+          <!-- Documents and Search Results -->
+          <div class="dev-main-content k-main-content">
+            <div class="dev-pane-header">
+              <span id="kDocsHeaderTitle" class="dev-diff-file">Indexed Knowledge Documents</span>
+              <span id="kDocsCount" class="muted" style="font-size:0.75rem;">0 documents</span>
+            </div>
+            <div id="kDocsContainer" class="k-docs-grid">
+              <!-- Dynamically populated document cards or search snippets -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pane 2: Reading Desk -->
+      <div id="kPaneReader" class="dev-pane k-pane">
+        <div class="k-reader-toolbar">
+          <div class="k-reader-meta-group">
+            <select id="kReaderDocSelect" class="cyber-select k-doc-select"></select>
+            <div class="k-reader-progress-wrap">
+              <div class="k-progress-bar"><div id="kReaderProgressBar" class="k-progress-fill" style="width:0%;"></div></div>
+              <span id="kReaderProgressLabel" class="muted" style="font-size:0.72rem;">0%</span>
+            </div>
+          </div>
+          <div class="k-reader-controls">
+            <!-- Typography switches -->
+            <div class="k-btn-group">
+              <button type="button" class="k-typo-btn active" data-font="sans" title="Sans-serif">Sans</button>
+              <button type="button" class="k-typo-btn" data-font="serif" title="Book Serif">Serif</button>
+              <button type="button" class="k-typo-btn" data-font="mono" title="Monospace">Mono</button>
+            </div>
+            <div class="k-btn-group">
+              <button type="button" id="btnReaderFontDec" class="k-control-btn" title="Decrease font size">A-</button>
+              <button type="button" id="btnReaderFontInc" class="k-control-btn" title="Increase font size">A+</button>
+            </div>
+            <div class="k-btn-group">
+              <button type="button" class="k-theme-btn active" data-theme="dark" title="Dark glass">Dark</button>
+              <button type="button" class="k-theme-btn" data-theme="sepia" title="Warm sepia">Sepia</button>
+              <button type="button" class="k-theme-btn" data-theme="oled" title="OLED black">OLED</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="k-reader-body-split">
+          <!-- Chapter / Page navigation sidebar -->
+          <div id="kReaderTocSidebar" class="k-reader-toc">
+            <div class="dev-section-title"><span>Chapters &amp; Sections</span></div>
+            <div id="kReaderTocList" class="k-toc-list"></div>
+          </div>
+
+          <!-- Distraction-free Reading Pane -->
+          <div class="k-reader-viewport">
+            <article id="kReaderContent" class="k-reader-article font-sans theme-dark">
+              <div class="muted" style="padding:40px;text-align:center;">Select a document from the top toolbar to begin reading.</div>
+            </article>
+
+            <!-- Floating Text Selection Popover -->
+            <div id="kPassagePopover" class="k-passage-popover hidden">
+              <button type="button" id="btnPopoverExplain" class="k-popover-btn primary-cyan">💡 Explain</button>
+              <button type="button" id="btnPopoverNote" class="k-popover-btn">🔖 Save Note</button>
+              <button type="button" id="btnPopoverChat" class="k-popover-btn">💬 Chat</button>
+            </div>
+
+            <!-- AI Reading Companion Explanation Box -->
+            <div id="kCompanionDrawer" class="k-companion-box hidden">
+              <div class="k-companion-head">
+                <span class="k-companion-title">AI Reading Companion</span>
+                <button type="button" id="btnCloseCompanion" class="ghost-xs">✕</button>
+              </div>
+              <div id="kCompanionText" class="k-companion-content">Thinking…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pane 3: Research Notebook -->
+      <div id="kPaneNotes" class="dev-pane k-pane">
+        <div class="k-notes-toolbar">
+          <div class="k-search-box flex-1">
+            <input type="text" id="kNotesSearch" placeholder="Filter saved notes by keyword, tag or document title…" class="cyber-input-field">
+          </div>
+          <button type="button" id="btnExportNotesMd" class="cyber-btn ghost">📥 Export Markdown</button>
+          <button type="button" id="btnManualAddNote" class="cyber-btn primary-cyan">+ New Note</button>
+        </div>
+
+        <!-- Manual Note Form -->
+        <div id="kAddNoteForm" class="k-note-form hidden">
+          <div class="form-group">
+            <label>Quoted Passage / Concept:</label>
+            <textarea id="kNotePassageInput" rows="2" placeholder="Paste quoted passage or idea…"></textarea>
+          </div>
+          <div class="k-form-row">
+            <div class="form-group flex-1">
+              <label>Your Analysis / Note:</label>
+              <input type="text" id="kNoteTextInput" placeholder="Your takeaway, critique or synthesis…" class="cyber-input-field">
+            </div>
+            <div class="form-group" style="width:160px;">
+              <label>Tags:</label>
+              <input type="text" id="kNoteTagsInput" placeholder="architecture, quote" class="cyber-input-field">
+            </div>
+            <div class="form-group" style="width:160px;">
+              <label>Citation / Page:</label>
+              <input type="text" id="kNoteCitationInput" placeholder="e.g. Page 12" class="cyber-input-field">
+            </div>
+            <div class="form-group" style="align-self:flex-end;">
+              <button type="button" id="btnSaveManualNote" class="cyber-btn primary-emerald">Save Note</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="kNotesList" class="k-notes-feed">
+          <!-- Dynamically populated research notes -->
+        </div>
+      </div>
+
+      <!-- Pane 4: Learning Studio (SM-2) -->
+      <div id="kPaneStudy" class="dev-pane k-pane">
+        <div class="k-study-toolbar">
+          <div class="k-study-deck-select-group">
+            <label class="muted" style="font-size:0.75rem;">Deck:</label>
+            <select id="kStudyDeckSelect" class="cyber-select"></select>
+            <span id="kDeckDueBadge" class="wb-badge wb-badge-amber">0 due</span>
+          </div>
+          <div class="k-study-actions">
+            <button type="button" id="btnCreateFlashcardManual" class="cyber-btn ghost-sm">+ Add Card</button>
+          </div>
+        </div>
+
+        <!-- Manual Flashcard Form -->
+        <div id="kAddCardForm" class="k-card-form hidden">
+          <div class="k-form-row">
+            <div class="form-group flex-1">
+              <label>Front (Question / Prompt):</label>
+              <textarea id="kCardFrontInput" rows="2" placeholder="What is ...?"></textarea>
+            </div>
+            <div class="form-group flex-1">
+              <label>Back (Answer / Explanation):</label>
+              <textarea id="kCardBackInput" rows="2" placeholder="The principle is ..."></textarea>
+            </div>
+          </div>
+          <div class="row-btns" style="justify-content:flex-end;margin-top:6px;">
+            <button type="button" id="btnSaveCardManual" class="cyber-btn primary-cyan">Save Flashcard</button>
+          </div>
+        </div>
+
+        <div class="k-study-stage">
+          <div id="kStudyCardBox" class="k-flip-container">
+            <div id="kFlipCardInner" class="k-flip-inner">
+              <div class="k-flip-face k-flip-front">
+                <span class="k-card-side-tag">QUESTION · CLICK TO FLIP</span>
+                <div id="kCardFrontContent" class="k-card-text">Select a deck or generate cards to begin your study session.</div>
+                <span class="k-card-hint">Press Space or click to flip</span>
+              </div>
+              <div class="k-flip-face k-flip-back">
+                <span class="k-card-side-tag">ANSWER</span>
+                <div id="kCardBackContent" class="k-card-text">Explanation will appear here.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SM-2 Rating Bar -->
+          <div id="kSm2ButtonBar" class="k-sm2-rating-bar hidden">
+            <button type="button" class="sm2-btn btn-again" data-rating="1">
+              <strong>Again (1)</strong>
+              <span>&lt; 1 day</span>
+            </button>
+            <button type="button" class="sm2-btn btn-hard" data-rating="2">
+              <strong>Hard (2)</strong>
+              <span>1 day</span>
+            </button>
+            <button type="button" class="sm2-btn btn-good" data-rating="3">
+              <strong>Good (3)</strong>
+              <span>3-6 days</span>
+            </button>
+            <button type="button" class="sm2-btn btn-easy" data-rating="4">
+              <strong>Easy (4)</strong>
+              <span>+ Easy Factor</span>
+            </button>
+          </div>
+
+          <div class="k-card-counter" id="kCardCounter">Card 0 of 0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Footer -->
+    <div class="modal-footer">
+      <span id="kStudioFooterMsg" class="muted" style="flex:1;font-size:0.75rem;"></span>
+      <button id="btnDismissKnowledgeModal" class="ghost" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
 <div id="toasts"></div>
 <div id="confirmVeil" class="veil hidden">
   <div class="veil-card">
@@ -2800,6 +3076,6 @@
   </div>
 </div>
 
-<script src="/static/app.js?v=5.4"></script>
+<script src="/static/app.js?v=5.5"></script>
 </body>
 </html>

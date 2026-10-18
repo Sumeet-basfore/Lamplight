@@ -24,6 +24,7 @@ from pydantic import BaseModel, field_validator
 
 import db
 import dev_workbench
+import knowledge_library
 
 OLLAMA_URL = "http://localhost:11434"
 KEEP_ALIVE = "30m"
@@ -702,6 +703,49 @@ class DevCommandRunIn(BaseModel):
     workspace_id: str | None = None
     command: str
     timeout: int = 15
+
+
+class WatchFolderIn(BaseModel):
+    folder_path: str
+    name: str = ""
+    workspace_id: str | None = None
+    recursive: bool = True
+
+
+class ResearchNoteIn(BaseModel):
+    workspace_id: str | None = None
+    doc_id: str | None = None
+    doc_title: str = ""
+    passage: str
+    note: str = ""
+    tags: str = ""
+    citation: str = ""
+
+
+class ReadingProgressIn(BaseModel):
+    workspace_id: str | None = None
+    progress_pct: float = 0.0
+    last_position: str = ""
+    bookmarks: list[dict] = []
+
+
+class ReadingAskIn(BaseModel):
+    passage: str
+    question: str
+    context: str = ""
+    model: str | None = None
+
+
+class FlashcardCreateIn(BaseModel):
+    deck_id: str
+    deck_title: str
+    workspace_id: str | None = None
+    front: str
+    back: str
+
+
+class FlashcardReviewIn(BaseModel):
+    rating: int  # 1 to 4 (Again, Hard, Good, Easy)
 
 
 class SessionRenameIn(BaseModel):
@@ -1519,6 +1563,24 @@ def _build_messages(mode: str, user_msg: str | None, session_id: str | None = No
             f"- Rigorously adopt this skill directive, persona, and formatting while answering the user's prompt."
         )
         sys_blocks.append(skill_instruction)
+
+    # 7. Sourced Knowledge Retrieval (Pillar 4)
+    if user_msg and len(user_msg.strip()) > 3:
+        try:
+            k_results = knowledge_library.search_knowledge_fts(user_msg, workspace_id=eff_ws_id, limit=3)
+            if k_results:
+                k_blocks = []
+                for k in k_results:
+                    clean_snip = re.sub(r"<[^>]+>", "", k["snippet"])
+                    k_blocks.append(f"- Source Document \"{k.get('title') or k['filename']}\": {clean_snip}")
+                sys_blocks.append(
+                    "### [RELEVANT SOURCED KNOWLEDGE & PASSAGES]\n"
+                    "The following verified excerpts were retrieved from the user's indexed Knowledge Library for this workspace. "
+                    "Cite the document title when referencing these passages, and distinguish direct sources from inferences:\n" +
+                    "\n".join(k_blocks)
+                )
+        except Exception:
+            pass
 
     if sys_blocks:
         msgs.append({"role": "system", "content": "\n\n".join(sys_blocks)})
@@ -4706,6 +4768,214 @@ def dev_command_run(body: DevCommandRunIn, x_passcode: str | None = Header(defau
         raise HTTPException(400, "No repository configured or detected.")
     res = dev_workbench.execute_guarded_command(repo, body.command, body.timeout)
     return {"ok": True, "execution": res}
+
+
+# ==============================================================================
+# Phase 4: Local Knowledge Library, Reading Desk & Personal Learning Studio API
+# ==============================================================================
+
+@app.get("/api/knowledge/sources")
+def knowledge_sources_list(workspace_id: str | None = None, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    sources = knowledge_library.list_watch_folders(workspace_id)
+    return {"ok": True, "sources": sources}
+
+
+@app.post("/api/knowledge/sources")
+def knowledge_source_add(body: WatchFolderIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    try:
+        source = knowledge_library.add_watch_folder(
+            body.folder_path,
+            body.name,
+            body.workspace_id or "ws_default",
+            body.recursive
+        )
+        return {"ok": True, "source": source}
+    except Exception as e:
+        raise HTTPException(400, str(e))
+
+
+@app.delete("/api/knowledge/sources/{source_id}")
+def knowledge_source_delete(source_id: str, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    ok = knowledge_library.remove_watch_folder(source_id)
+    return {"ok": ok}
+
+
+@app.post("/api/knowledge/sync")
+def knowledge_sync(source_id: str | None = None, workspace_id: str | None = None,
+                   x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    if source_id:
+        res = knowledge_library.sync_watch_folder(source_id)
+        return {"ok": True, "result": res}
+    else:
+        results = knowledge_library.sync_all_watch_folders(workspace_id)
+        return {"ok": True, "results": results}
+
+
+@app.get("/api/knowledge/documents")
+def knowledge_documents_list(workspace_id: str | None = None, limit: int = 100,
+                             x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    docs = knowledge_library.list_knowledge_documents(workspace_id, limit)
+    return {"ok": True, "documents": docs}
+
+
+@app.get("/api/knowledge/search")
+def knowledge_search(q: str, workspace_id: str | None = None, limit: int = 25,
+                     x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    results = knowledge_library.search_knowledge_fts(q, workspace_id, limit)
+    return {"ok": True, "query": q, "results": results}
+
+
+@app.get("/api/knowledge/reading/{doc_id}")
+def knowledge_reading_get(doc_id: str, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    data = knowledge_library.get_document_for_reading(doc_id)
+    if not data:
+        raise HTTPException(404, "Document not found")
+    return {"ok": True, "document": data}
+
+
+@app.post("/api/knowledge/reading/{doc_id}/progress")
+def knowledge_reading_progress(doc_id: str, body: ReadingProgressIn,
+                               x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    ok = knowledge_library.save_reading_progress(
+        doc_id,
+        body.workspace_id or "ws_default",
+        body.progress_pct,
+        body.last_position,
+        body.bookmarks
+    )
+    return {"ok": ok}
+
+
+@app.post("/api/knowledge/reading/{doc_id}/ask")
+def knowledge_reading_ask(doc_id: str, body: ReadingAskIn,
+                          x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    doc_info = knowledge_library.get_document_for_reading(doc_id)
+    doc_title = doc_info["title"] if doc_info else "the document"
+
+    active_model = body.model or DEFAULT_MODELS.get("friend", "llama3.2:3b")
+    sys_prompt = (
+        f"You are the AI Reading Companion for \"{doc_title}\".\n"
+        "Provide a direct, insightful, and precise explanation of the selected passage in the context of the work.\n"
+        "Ground your answer strictly in the text, clarify ambiguous concepts, and distinguish explicit claims from interpretation."
+    )
+    prompt = (
+        f"DOCUMENT: {doc_title}\n\n"
+        f"SELECTED PASSAGE:\n\"{body.passage}\"\n\n"
+        f"SURROUNDING CONTEXT:\n{body.context[:3000]}\n\n"
+        f"READER'S QUESTION:\n{body.question}"
+    )
+    explanation = _run_model_completion(active_model, prompt, sys_prompt, 0.3)
+    return {"ok": True, "explanation": explanation, "model": active_model}
+
+
+@app.get("/api/knowledge/notes")
+def knowledge_notes_list(workspace_id: str | None = None, doc_id: str | None = None,
+                         x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    notes = knowledge_library.list_research_notes(workspace_id, doc_id)
+    return {"ok": True, "notes": notes}
+
+
+@app.post("/api/knowledge/notes")
+def knowledge_note_add(body: ResearchNoteIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    note = knowledge_library.add_research_note(
+        body.workspace_id or "ws_default",
+        body.doc_id,
+        body.doc_title,
+        body.passage,
+        body.note,
+        body.tags,
+        body.citation
+    )
+    return {"ok": True, "note": note}
+
+
+@app.delete("/api/knowledge/notes/{note_id}")
+def knowledge_note_delete(note_id: str, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    ok = knowledge_library.delete_research_note(note_id)
+    return {"ok": ok}
+
+
+@app.get("/api/knowledge/notes/export")
+def knowledge_notes_export(workspace_id: str | None = None, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    md = knowledge_library.export_research_notes_markdown(workspace_id)
+    return {"ok": True, "markdown": md}
+
+
+@app.get("/api/study/flashcards")
+def study_flashcards_list(workspace_id: str | None = None, deck_id: str | None = None,
+                          due_only: bool = False, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    cards = knowledge_library.list_flashcards(workspace_id, deck_id, due_only)
+    return {"ok": True, "flashcards": cards}
+
+
+@app.get("/api/study/decks")
+def study_decks_list(workspace_id: str | None = None, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    decks = knowledge_library.list_flashcard_decks(workspace_id)
+    return {"ok": True, "decks": decks}
+
+
+@app.post("/api/study/flashcards")
+def study_flashcard_create(body: FlashcardCreateIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    card = knowledge_library.create_flashcard(
+        body.deck_id,
+        body.deck_title,
+        body.workspace_id or "ws_default",
+        body.front,
+        body.back
+    )
+    return {"ok": True, "flashcard": card}
+
+
+@app.post("/api/study/flashcards/{card_id}/review")
+def study_flashcard_review(card_id: str, body: FlashcardReviewIn,
+                           x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    try:
+        res = knowledge_library.review_flashcard_sm2(card_id, body.rating)
+        return {"ok": True, "result": res}
+    except Exception as e:
+        raise HTTPException(400, str(e))
+
+
+@app.delete("/api/study/flashcards/{card_id}")
+def study_flashcard_delete(card_id: str, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    ok = knowledge_library.delete_flashcard(card_id)
+    return {"ok": ok}
 
 
 
