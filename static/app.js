@@ -8366,7 +8366,7 @@ async function fetchAndRenderContextInspector() {
         } else if (layer.name.includes("History")) {
           innerContent = layer.items.map(t => `
             <div class="ci-turn-item">
-              <strong style="color:${t.role === 'user' ? '#38bdf8' : '#a855f7'}; text-transform:uppercase;">${esc(t.role)}</strong>
+              <strong class="ci-role-tag ci-role-${esc(t.role)}">${esc(t.role)}</strong>
               <span class="muted" style="font-size:0.7rem; margin-left:6px;">~${t.tokens} tok</span>
               <div style="margin-top:2px; font-family:'JetBrains Mono', monospace; font-size:0.75rem;">${esc(t.content ? t.content.slice(0, 150) + (t.content.length > 150 ? '…' : '') : '')}</div>
             </div>
