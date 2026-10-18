@@ -871,7 +871,7 @@ function showApp() {
   $("btnMemory").classList.toggle("hidden", mode !== "friend");
   if ($("btnArchitectStack")) $("btnArchitectStack").classList.toggle("hidden", mode !== "architect");
   if ($("btnMuseBible")) $("btnMuseBible").classList.toggle("hidden", mode !== "muse");
-  wireTabs(); moveGlow(); loadPicker(); loadHistory(); loadSessions(mode); loadVramStatus(); wireThemes(); loadSkills(); wireSkills(); wireTts(); loadTtsSettings(); initTranscriptModal(); wireCanvas(); wireLab(); wireArena(); wireProviderForm(); wireDocHub(); wireObservatory(); wirePrompts(); wireWorkbenchMenu(); wireArchitect(); wireMuse(); wireThinkingLevels(); wireModelCartridge(); wireWebSearch(); wireTreg(); wireWorkspaces(); loadWorkspaces(); wireMemoryCenter(); wireBackups(); wireDevWorkbench(); wireKnowledgeStudio(); wireModelIntelligence(); wireStoryStudio(); wireMultimodalStudio();
+  wireTabs(); moveGlow(); loadPicker(); loadHistory(); loadSessions(mode); loadVramStatus(); wireThemes(); loadSkills(); wireSkills(); wireTts(); loadTtsSettings(); initTranscriptModal(); wireCanvas(); wireLab(); wireArena(); wireProviderForm(); wireDocHub(); wireObservatory(); wirePrompts(); wireWorkbenchMenu(); wireArchitect(); wireMuse(); wireThinkingLevels(); wireModelCartridge(); wireWebSearch(); wireTreg(); wireWorkspaces(); loadWorkspaces(); wireMemoryCenter(); wireBackups(); wireDevWorkbench(); wireKnowledgeStudio(); wireModelIntelligence(); wireStoryStudio(); wireMultimodalStudio(); wireWorkflowAutomation();
 }
 
 document.addEventListener("click", (e) => {
@@ -8022,6 +8022,12 @@ function wireWorkbenchMenu() {
     closeDrawers();
     openMultimodalStudioModal();
   });
+
+  $("wbItemWorkflowAutomation")?.addEventListener("click", () => {
+    closeWorkbenchMenu();
+    closeDrawers();
+    openWorkflowAutomationModal();
+  });
   // Global pill active state handling
   document.addEventListener("click", (e) => {
     const pill = e.target.closest(".cyber-pill");
@@ -12540,6 +12546,773 @@ function stopVoiceTtsSpeech() {
     mmVoiceTtsAudio.currentTime = 0;
     mmVoiceTtsAudio = null;
     toast("Speech audio stopped");
+  }
+}
+
+// ==========================================================================
+// Pillar 7: Workflow Recipes & Automation Engine Frontend
+// ==========================================================================
+
+let wfRecipesCache = [];
+let wfJobsCache = [];
+let wfSchedulesCache = [];
+let wfConnectorsCache = [];
+let wfActiveJobId = null;
+let wfJobPollTimer = null;
+let wfCurrentRecipe = null;
+let wfBuilderInputs = [];
+let wfBuilderSteps = [];
+
+function wireWorkflowAutomation() {
+  // Modal toggle handlers
+  $("btnCloseWorkflowAutomationModal")?.addEventListener("click", closeWorkflowAutomationModal);
+  $("btnDismissWorkflowAutomationModal")?.addEventListener("click", closeWorkflowAutomationModal);
+
+  // Tab navigation
+  document.querySelectorAll(".wf-nav-tab").forEach(tabBtn => {
+    tabBtn.addEventListener("click", () => {
+      const targetTab = tabBtn.getAttribute("data-tab");
+      switchWfTab(targetTab);
+    });
+  });
+
+  // Category filter pills
+  $("wfRecipeFilterPills")?.addEventListener("click", (e) => {
+    const pill = e.target.closest(".wf-pill");
+    if (!pill) return;
+    $("wfRecipeFilterPills").querySelectorAll(".wf-pill").forEach(p => p.classList.remove("active"));
+    pill.classList.add("active");
+    const cat = pill.getAttribute("data-category");
+    loadWfRecipes(cat);
+  });
+
+  // Back from run drawer to list view
+  $("btnBackToRecipesList")?.addEventListener("click", () => {
+    $("wfRunRecipeDrawer")?.classList.add("hidden");
+    $("wfRecipesListView")?.classList.remove("hidden");
+  });
+
+  // Launch recipe button
+  $("btnExecuteRecipeNow")?.addEventListener("click", executeRecipeRunner);
+
+  // Go to builder button
+  $("btnWfGoToBuilder")?.addEventListener("click", () => {
+    switchWfTab("builder");
+  });
+
+  // Jobs filter pills
+  $("wfJobStatusFilterPills")?.addEventListener("click", (e) => {
+    const pill = e.target.closest(".wf-pill");
+    if (!pill) return;
+    $("wfJobStatusFilterPills").querySelectorAll(".wf-pill").forEach(p => p.classList.remove("active"));
+    pill.classList.add("active");
+    const status = pill.getAttribute("data-status");
+    loadWfJobs(status);
+  });
+
+  $("btnRefreshJobs")?.addEventListener("click", () => {
+    const activePill = $("wfJobStatusFilterPills")?.querySelector(".wf-pill.active");
+    const status = activePill ? activePill.getAttribute("data-status") : "";
+    loadWfJobs(status);
+  });
+
+  // Job detail panel controls
+  $("btnCloseJobDetail")?.addEventListener("click", () => {
+    $("wfJobDetailDrawer")?.classList.add("hidden");
+    if (wfJobPollTimer) clearInterval(wfJobPollTimer);
+    wfActiveJobId = null;
+  });
+
+  $("btnCancelActiveJob")?.addEventListener("click", async () => {
+    if (!wfActiveJobId) return;
+    try {
+      await api(`/api/automation/jobs/${wfActiveJobId}/cancel`, { method: "POST" });
+      toast("Cancellation requested.");
+      openJobDetail(wfActiveJobId);
+      loadWfJobs();
+    } catch (err) {
+      toast("Failed to cancel: " + err.message);
+    }
+  });
+
+  $("btnRetryFailedJob")?.addEventListener("click", async () => {
+    if (!wfActiveJobId) return;
+    try {
+      await api(`/api/automation/jobs/${wfActiveJobId}/retry`, { method: "POST" });
+      toast("Job requeued.");
+      openJobDetail(wfActiveJobId);
+      loadWfJobs();
+    } catch (err) {
+      toast("Failed to retry: " + err.message);
+    }
+  });
+
+  $("btnSubtabJobLogs")?.addEventListener("click", () => {
+    $("btnSubtabJobLogs")?.classList.add("active");
+    $("btnSubtabJobOutput")?.classList.remove("active");
+    $("wfJobDetailLogsView")?.classList.remove("hidden");
+    $("wfJobDetailOutputView")?.classList.add("hidden");
+  });
+
+  $("btnSubtabJobOutput")?.addEventListener("click", () => {
+    $("btnSubtabJobOutput")?.classList.add("active");
+    $("btnSubtabJobLogs")?.classList.remove("active");
+    $("wfJobDetailOutputView")?.classList.remove("hidden");
+    $("wfJobDetailLogsView")?.classList.add("hidden");
+  });
+
+  $("btnCopyJobOutput")?.addEventListener("click", () => {
+    const text = $("wfJobOutputContent")?.innerText || "";
+    navigator.clipboard.writeText(text).then(() => toast("Copied markdown to clipboard."));
+  });
+
+  // Scheduled tasks controls
+  $("btnOpenNewScheduleModal")?.addEventListener("click", promptNewSchedule);
+
+  // Connectors controls
+  $("btnRefreshConnectors")?.addEventListener("click", loadWfConnectors);
+
+  // Builder controls
+  $("btnAddBuildInput")?.addEventListener("click", addBuilderInputRow);
+  $("btnAddBuildStep")?.addEventListener("click", addBuilderStepRow);
+  $("btnResetRecipeBuilder")?.addEventListener("click", initRecipeBuilder);
+  $("btnSaveCustomRecipe")?.addEventListener("click", saveCustomRecipe);
+}
+
+function openWorkflowAutomationModal(initialTab = "recipes") {
+  $("workflowAutomationModal")?.classList.remove("hidden");
+  switchWfTab(initialTab);
+  populateWfModelSelect();
+}
+
+function closeWorkflowAutomationModal() {
+  $("workflowAutomationModal")?.classList.add("hidden");
+  if (wfJobPollTimer) clearInterval(wfJobPollTimer);
+  wfActiveJobId = null;
+}
+
+function switchWfTab(tabName) {
+  document.querySelectorAll(".wf-nav-tab").forEach(tab => {
+    tab.classList.toggle("active", tab.getAttribute("data-tab") === tabName);
+  });
+  document.querySelectorAll(".wf-tab-pane").forEach(pane => {
+    pane.classList.remove("active");
+  });
+
+  const targetPane = $(`wfTabContent${tabName.charAt(0).toUpperCase() + tabName.slice(1)}`);
+  if (targetPane) targetPane.classList.add("active");
+
+  if (tabName === "recipes") {
+    loadWfRecipes();
+  } else if (tabName === "jobs") {
+    loadWfJobs();
+  } else if (tabName === "schedules") {
+    loadWfSchedules();
+  } else if (tabName === "connectors") {
+    loadWfConnectors();
+  } else if (tabName === "builder") {
+    if (wfBuilderInputs.length === 0 && wfBuilderSteps.length === 0) {
+      initRecipeBuilder();
+    }
+  }
+}
+
+async function populateWfModelSelect() {
+  const select = $("wfRunModelSelect");
+  if (!select) return;
+  try {
+    const res = await api("/api/models");
+    const models = res.models || [];
+    select.innerHTML = `<option value="">Default Recommended</option>` +
+      models.map(m => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join("");
+  } catch (err) {
+    console.warn("Could not load models for workflow runner:", err);
+  }
+}
+
+// --------------------------------------------------------------------------
+// 1. RECIPES ENGINE
+// --------------------------------------------------------------------------
+
+async function loadWfRecipes(category = "all") {
+  const grid = $("wfRecipesGrid");
+  if (!grid) return;
+  grid.innerHTML = `<div class="muted center-text" style="grid-column: 1/-1; padding: 25px;">Loading workflow recipes...</div>`;
+
+  try {
+    const res = await api("/api/automation/recipes");
+    wfRecipesCache = res.recipes || [];
+    renderWfRecipeCards(category === "all" ? wfRecipesCache : wfRecipesCache.filter(r => r.category === category));
+  } catch (err) {
+    grid.innerHTML = `<div class="danger" style="grid-column: 1/-1; padding: 20px;">Failed to load recipes: ${esc(err.message)}</div>`;
+  }
+}
+
+function renderWfRecipeCards(recipes) {
+  const grid = $("wfRecipesGrid");
+  if (!grid) return;
+  if (!recipes || recipes.length === 0) {
+    grid.innerHTML = `<div class="muted center-text" style="grid-column: 1/-1; padding: 40px;">No recipes found in this category.</div>`;
+    return;
+  }
+
+  grid.innerHTML = recipes.map(r => `
+    <div class="wf-recipe-card" data-recipe-id="${esc(r.id)}">
+      <div class="wf-recipe-head">
+        <div class="row align-center gap-10">
+          <div class="wf-recipe-icon-box">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            </svg>
+          </div>
+          <div>
+            <h4 class="wf-recipe-title">${esc(r.title)}</h4>
+            <span class="badge" style="font-size:0.65rem; text-transform:uppercase;">${esc(r.category)}</span>
+          </div>
+        </div>
+        ${!r.is_preset ? `<button type="button" class="ghost-btn sm-btn icon-btn" onclick="event.stopPropagation(); deleteCustomRecipe('${esc(r.id)}')" title="Delete custom recipe">🗑</button>` : `<span class="badge badge-emerald" style="font-size:0.6rem;">CORE</span>`}
+      </div>
+      <p class="wf-recipe-desc">${esc(r.description || 'No description provided.')}</p>
+      <div class="wf-recipe-footer">
+        <span class="wf-recipe-meta">${(r.steps || []).length} Execution Step${(r.steps || []).length === 1 ? '' : 's'}</span>
+        <button type="button" class="primary-btn sm-btn" onclick="openRecipeRunner('${esc(r.id)}')">
+          Configure &amp; Run ↗
+        </button>
+      </div>
+    </div>
+  `).join("");
+}
+
+function openRecipeRunner(recipeId) {
+  const recipe = wfRecipesCache.find(r => r.id === recipeId);
+  if (!recipe) return;
+  wfCurrentRecipe = recipe;
+
+  $("wfRecipesListView")?.classList.add("hidden");
+  $("wfRunRecipeDrawer")?.classList.remove("hidden");
+
+  $("wfRunRecipeTitle").textContent = recipe.title;
+  $("wfRunRecipeDesc").textContent = recipe.description || "";
+  $("wfRunRecipeCategory").textContent = recipe.category.toUpperCase();
+
+  // Render input fields
+  const container = $("wfRunInputsContainer");
+  const schema = recipe.input_schema || [];
+  if (schema.length === 0) {
+    container.innerHTML = `<div class="muted" style="font-size:0.8rem; padding:8px 0;">This recipe requires no manual parameters.</div>`;
+  } else {
+    container.innerHTML = schema.map(f => {
+      if (f.type === "textarea") {
+        return `
+          <div class="wf-field-group" style="margin-bottom:10px;">
+            <label for="wfInput_${esc(f.key)}">${esc(f.label)}</label>
+            <textarea id="wfInput_${esc(f.key)}" class="input-textarea" rows="3">${esc(f.default || '')}</textarea>
+          </div>
+        `;
+      } else {
+        return `
+          <div class="wf-field-group" style="margin-bottom:10px;">
+            <label for="wfInput_${esc(f.key)}">${esc(f.label)}</label>
+            <input type="text" id="wfInput_${esc(f.key)}" class="input-text" value="${esc(f.default || '')}">
+          </div>
+        `;
+      }
+    }).join("");
+  }
+
+  // Render steps preview
+  const stepsList = $("wfRunStepsList");
+  stepsList.innerHTML = (recipe.steps || []).map((s, idx) => `
+    <div class="wf-step-preview-item">
+      <div class="wf-step-num">${idx + 1}</div>
+      <div style="flex:1;">
+        <strong style="display:block; color:#f1f5f9;">${esc(s.name || `Step ${idx + 1}`)}</strong>
+        <span class="muted" style="font-size:0.7rem;">Type: ${esc(s.type || 'llm_generate')}</span>
+      </div>
+    </div>
+  `).join("");
+}
+
+async function executeRecipeRunner() {
+  if (!wfCurrentRecipe) return;
+  const inputs = {};
+  (wfCurrentRecipe.input_schema || []).forEach(f => {
+    const el = $(`wfInput_${f.key}`);
+    if (el) inputs[f.key] = el.value;
+  });
+
+  const modelOverride = $("wfRunModelSelect")?.value || null;
+
+  try {
+    toast(`Queuing workflow: ${wfCurrentRecipe.title}...`);
+    const res = await api(`/api/automation/recipes/${wfCurrentRecipe.id}/run`, {
+      method: "POST",
+      body: JSON.stringify({ inputs, model: modelOverride })
+    });
+
+    toast("Workflow queued in background engine!");
+    // Switch to jobs tab and open this job directly
+    switchWfTab("jobs");
+    openJobDetail(res.job_id);
+  } catch (err) {
+    toast("Failed to dispatch workflow: " + err.message);
+  }
+}
+
+async function deleteCustomRecipe(recipeId) {
+  if (!confirm("Are you sure you want to delete this custom recipe?")) return;
+  try {
+    await api(`/api/automation/recipes/${recipeId}`, { method: "DELETE" });
+    toast("Recipe deleted.");
+    loadWfRecipes();
+  } catch (err) {
+    toast("Error: " + err.message);
+  }
+}
+
+// --------------------------------------------------------------------------
+// 2. BACKGROUND JOBS QUEUE
+// --------------------------------------------------------------------------
+
+async function loadWfJobs(statusFilter = "") {
+  const container = $("wfJobsListContainer");
+  if (!container) return;
+
+  try {
+    const url = statusFilter ? `/api/automation/jobs?status=${statusFilter}` : "/api/automation/jobs";
+    const res = await api(url);
+    wfJobsCache = res.jobs || [];
+
+    // Update active badge count
+    const activeCount = wfJobsCache.filter(j => j.status === "running" || j.status === "queued").length;
+    const badge = $("wfJobActiveCountBadge");
+    if (badge) {
+      badge.textContent = activeCount;
+      badge.classList.toggle("hidden", activeCount === 0);
+    }
+
+    renderWfJobCards(wfJobsCache);
+  } catch (err) {
+    container.innerHTML = `<div class="danger" style="padding:15px;">Failed to load jobs: ${esc(err.message)}</div>`;
+  }
+}
+
+function renderWfJobCards(jobs) {
+  const container = $("wfJobsListContainer");
+  if (!container) return;
+  if (!jobs || jobs.length === 0) {
+    container.innerHTML = `<div class="muted center-text" style="padding:40px;">No background jobs found.</div>`;
+    return;
+  }
+
+  container.innerHTML = jobs.map(j => `
+    <div class="wf-job-card ${wfActiveJobId === j.id ? 'active' : ''}" onclick="openJobDetail('${esc(j.id)}')">
+      <div class="wf-job-card-top">
+        <span class="wf-job-title" title="${esc(j.title)}">${esc(j.title)}</span>
+        <span class="wf-job-badge status-${esc(j.status)}">${esc(j.status)}</span>
+      </div>
+      <div class="wf-progress-bar-bg" style="height:4px; margin: 4px 0;">
+        <div class="wf-progress-bar-fill" style="width: ${j.progress || 0}%;"></div>
+      </div>
+      <div class="wf-job-card-meta">
+        <span>${esc(j.progress_label || 'In queue')}</span>
+        <span>${j.progress || 0}% • ${esc(j.created_at ? j.created_at.slice(11, 16) : '')}</span>
+      </div>
+    </div>
+  `).join("");
+}
+
+async function openJobDetail(jobId) {
+  wfActiveJobId = jobId;
+  $("wfJobDetailDrawer")?.classList.remove("hidden");
+
+  // Highlight card in list
+  document.querySelectorAll(".wf-job-card").forEach(c => {
+    c.classList.toggle("active", c.getAttribute("onclick")?.includes(jobId));
+  });
+
+  await fetchAndRenderJobDetails(jobId);
+
+  // If running or queued, poll periodically
+  if (wfJobPollTimer) clearInterval(wfJobPollTimer);
+  wfJobPollTimer = setInterval(async () => {
+    if (!wfActiveJobId) {
+      clearInterval(wfJobPollTimer);
+      return;
+    }
+    const isStillActive = await fetchAndRenderJobDetails(wfActiveJobId);
+    if (!isStillActive) {
+      clearInterval(wfJobPollTimer);
+      loadWfJobs(); // refresh status in list
+    }
+  }, 1500);
+}
+
+async function fetchAndRenderJobDetails(jobId) {
+  try {
+    const res = await api(`/api/automation/jobs/${jobId}`);
+    const job = res.job;
+    if (!job) return false;
+
+    $("wfDetailJobTitle").textContent = job.title;
+    const badge = $("wfDetailStatusBadge");
+    badge.className = `wf-job-badge status-${job.status}`;
+    badge.textContent = job.status.toUpperCase();
+
+    $("wfDetailProgressBar").style.width = `${job.progress || 0}%`;
+    $("wfDetailProgressPct").textContent = `${job.progress || 0}%`;
+    $("wfDetailProgressLabel").textContent = job.progress_label || "";
+
+    // Show/hide action buttons
+    $("btnCancelActiveJob")?.classList.toggle("hidden", job.status !== "running" && job.status !== "queued");
+    $("btnRetryFailedJob")?.classList.toggle("hidden", job.status !== "failed" && job.status !== "cancelled");
+
+    // Render Logs
+    const term = $("wfJobLogsTerminal");
+    if (term) {
+      const logs = job.logs || [];
+      if (logs.length === 0) {
+        term.textContent = "Waiting for worker execution logs...";
+      } else {
+        term.innerHTML = logs.map(l => {
+          let color = "#94a3b8";
+          if (l.level === "ERROR") color = "#f87171";
+          if (l.level === "WARN") color = "#fbbf24";
+          if (l.level === "SUCCESS") color = "#34d399";
+          return `<div style="color:${color};"><span style="opacity:0.5;">[${esc(l.time)}]</span> [${esc(l.level)}] ${esc(l.msg)}</div>`;
+        }).join("");
+        term.scrollTop = term.scrollHeight;
+      }
+    }
+
+    // Render Result Output
+    const outputContainer = $("wfJobOutputContent");
+    if (outputContainer) {
+      const resData = job.result || {};
+      const outputText = resData.final_output || JSON.stringify(resData, null, 2);
+      if (typeof marked !== "undefined" && resData.final_output) {
+        outputContainer.innerHTML = marked.parse(outputText);
+      } else {
+        outputContainer.innerHTML = `<pre style="white-space:pre-wrap; font-size:0.8rem;">${esc(outputText)}</pre>`;
+      }
+    }
+
+    return job.status === "running" || job.status === "queued";
+  } catch (err) {
+    console.warn("Error polling job detail:", err);
+    return false;
+  }
+}
+
+// --------------------------------------------------------------------------
+// 3. SCHEDULED TASKS
+// --------------------------------------------------------------------------
+
+async function loadWfSchedules() {
+  const container = $("wfSchedulesContainer");
+  if (!container) return;
+
+  try {
+    const res = await api("/api/automation/schedules");
+    wfSchedulesCache = res.schedules || [];
+    renderWfScheduleCards(wfSchedulesCache);
+  } catch (err) {
+    container.innerHTML = `<div class="danger" style="grid-column: 1/-1; padding:20px;">Failed to load schedules: ${esc(err.message)}</div>`;
+  }
+}
+
+function renderWfScheduleCards(schedules) {
+  const container = $("wfSchedulesContainer");
+  if (!container) return;
+  if (!schedules || schedules.length === 0) {
+    container.innerHTML = `<div class="muted center-text" style="grid-column: 1/-1; padding:40px;">No automated schedules configured.</div>`;
+    return;
+  }
+
+  container.innerHTML = schedules.map(s => `
+    <div class="wf-schedule-card">
+      <div class="wf-schedule-head">
+        <div>
+          <h4 style="margin:0 0 3px 0; font-size:0.95rem; color:#f1f5f9;">${esc(s.name)}</h4>
+          <span class="badge" style="font-size:0.65rem;">${esc(s.task_type)}</span>
+        </div>
+        <label class="switch" title="Toggle scheduled run" style="margin-left:auto;">
+          <input type="checkbox" ${s.enabled ? 'checked' : ''} onchange="toggleScheduleActive('${esc(s.id)}', this.checked)">
+          <span class="slider round"></span>
+        </label>
+      </div>
+      <p class="muted" style="font-size:0.78rem; line-height:1.4; margin:8px 0 12px 0;">${esc(s.description || 'No description.')}</p>
+      
+      <div style="font-size:0.72rem; color:#94a3b8; display:flex; flex-direction:column; gap:4px; margin-bottom:12px; background:rgba(0,0,0,0.2); padding:8px 10px; border-radius:6px;">
+        <div><strong>Cadence:</strong> ${s.schedule_type === 'interval' ? `Every ${s.interval_minutes} minutes` : `Daily at ${s.daily_time}`}</div>
+        <div><strong>Next Run:</strong> ${esc(s.next_run_at || 'Pending')}</div>
+        <div><strong>Last Run:</strong> ${esc(s.last_run_at || 'Never')} (${s.run_count || 0} total runs)</div>
+      </div>
+
+      <div class="row gap-8 justify-end" style="margin-top:auto;">
+        <button type="button" class="primary-btn sm-btn" onclick="triggerScheduleNow('${esc(s.id)}')">Run Now ⚡</button>
+        <button type="button" class="ghost-btn sm-btn danger-text" onclick="deleteScheduleTask('${esc(s.id)}')">Delete</button>
+      </div>
+    </div>
+  `).join("");
+}
+
+async function toggleScheduleActive(taskId, enabled) {
+  try {
+    await api(`/api/automation/schedules/${taskId}/toggle`, {
+      method: "POST",
+      body: JSON.stringify({ enabled })
+    });
+    toast(`Schedule ${enabled ? 'enabled' : 'paused'}.`);
+  } catch (err) {
+    toast("Failed to update schedule: " + err.message);
+  }
+}
+
+async function triggerScheduleNow(taskId) {
+  try {
+    toast("Triggering scheduled task execution...");
+    const res = await api(`/api/automation/schedules/${taskId}/run-now`, { method: "POST" });
+    toast("Enqueued task into background worker queue!");
+    switchWfTab("jobs");
+    openJobDetail(res.job_id);
+  } catch (err) {
+    toast("Failed to trigger task: " + err.message);
+  }
+}
+
+async function deleteScheduleTask(taskId) {
+  if (!confirm("Are you sure you want to delete this scheduled task?")) return;
+  try {
+    await api(`/api/automation/schedules/${taskId}`, { method: "DELETE" });
+    toast("Schedule deleted.");
+    loadWfSchedules();
+  } catch (err) {
+    toast("Error: " + err.message);
+  }
+}
+
+function promptNewSchedule() {
+  const name = prompt("Enter scheduled task name (e.g. 'Hourly Repo Health'):");
+  if (!name) return;
+  const interval = parseInt(prompt("Enter interval in minutes (e.g. 60):", "60") || "60", 10);
+  
+  api("/api/automation/schedules", {
+    method: "POST",
+    body: JSON.stringify({
+      name,
+      description: "Custom automated scheduled task",
+      schedule_type: "interval",
+      interval_minutes: interval,
+      task_type: "backup_snapshot",
+      enabled: true
+    })
+  }).then(() => {
+    toast("Scheduled task created!");
+    loadWfSchedules();
+  }).catch(err => toast("Failed to create schedule: " + err.message));
+}
+
+// --------------------------------------------------------------------------
+// 4. TOOL CONNECTORS REGISTRY
+// --------------------------------------------------------------------------
+
+async function loadWfConnectors() {
+  const container = $("wfConnectorsContainer");
+  if (!container) return;
+
+  try {
+    const res = await api("/api/automation/connectors");
+    wfConnectorsCache = res.connectors || [];
+    renderWfConnectorCards(wfConnectorsCache);
+  } catch (err) {
+    container.innerHTML = `<div class="danger" style="grid-column: 1/-1; padding:20px;">Failed to load connectors: ${esc(err.message)}</div>`;
+  }
+}
+
+function renderWfConnectorCards(connectors) {
+  const container = $("wfConnectorsContainer");
+  if (!container) return;
+  if (!connectors || connectors.length === 0) {
+    container.innerHTML = `<div class="muted center-text" style="grid-column: 1/-1; padding:40px;">No connectors registered.</div>`;
+    return;
+  }
+
+  container.innerHTML = connectors.map(c => `
+    <div class="wf-connector-card" data-conn-id="${esc(c.id)}">
+      <div class="wf-connector-head">
+        <div>
+          <h4 style="margin:0 0 3px 0; font-size:0.95rem; color:#f1f5f9;">${esc(c.name)}</h4>
+          <span class="badge" style="font-size:0.65rem; text-transform:uppercase;">${esc(c.category)}</span>
+        </div>
+        <label class="switch" title="Enable or disable connector">
+          <input type="checkbox" id="connToggle_${esc(c.id)}" ${c.enabled ? 'checked' : ''} onchange="saveConnectorState('${esc(c.id)}')">
+          <span class="slider round"></span>
+        </label>
+      </div>
+      <p class="muted" style="font-size:0.78rem; line-height:1.4; margin:6px 0 10px 0;">${esc(c.description)}</p>
+
+      <div style="margin-bottom:10px;">
+        <span class="muted" style="display:block; font-size:0.7rem; margin-bottom:3px;">Declared Permissions:</span>
+        <div>
+          ${(c.permissions || []).map(p => `<span class="wf-chip">${esc(p)}</span>`).join("")}
+        </div>
+      </div>
+
+      <div style="margin-bottom:14px;">
+        <span class="muted" style="display:block; font-size:0.7rem; margin-bottom:3px;">Supported Operations:</span>
+        <div>
+          ${(c.operations || []).map(op => `<span class="wf-chip" style="background:rgba(245,158,11,0.1); color:#fbbf24; border-color:rgba(245,158,11,0.25);">${esc(op)}</span>`).join("")}
+        </div>
+      </div>
+
+      <div style="display:flex; align-items:center; justify-content:space-between; padding-top:10px; border-top:1px solid rgba(255,255,255,0.06); margin-top:auto;">
+        <label style="font-size:0.75rem; color:#cbd5e1; display:flex; align-items:center; gap:6px; cursor:pointer;">
+          <input type="checkbox" id="connApproval_${esc(c.id)}" ${c.approval_required ? 'checked' : ''} onchange="saveConnectorState('${esc(c.id)}')">
+          Require Human Approval
+        </label>
+        <span class="muted" style="font-size:0.7rem;">Bots: ${(c.allowed_bots || []).join(", ")}</span>
+      </div>
+    </div>
+  `).join("");
+}
+
+async function saveConnectorState(connectorId) {
+  const enabled = $(`connToggle_${connectorId}`)?.checked ?? true;
+  const approval = $(`connApproval_${connectorId}`)?.checked ?? false;
+  const conn = wfConnectorsCache.find(c => c.id === connectorId);
+  const allowedBots = conn ? conn.allowed_bots : ["*"];
+
+  try {
+    await api(`/api/automation/connectors/${connectorId}`, {
+      method: "POST",
+      body: JSON.stringify({
+        enabled,
+        approval_required: approval,
+        allowed_bots: allowedBots
+      })
+    });
+    toast("Connector security policy updated.");
+  } catch (err) {
+    toast("Failed to update connector: " + err.message);
+  }
+}
+
+// --------------------------------------------------------------------------
+// 5. CUSTOM RECIPE BUILDER
+// --------------------------------------------------------------------------
+
+function initRecipeBuilder() {
+  wfBuilderInputs = [
+    { key: "target", label: "Target / Topic", type: "text", default: "" }
+  ];
+  wfBuilderSteps = [
+    { name: "Analysis Step", type: "llm_generate", prompt: "Analyze the following: {{inputs.target}}" }
+  ];
+  $("wfBuildTitle").value = "";
+  $("wfBuildDesc").value = "";
+  $("wfBuildCategory").value = "research";
+  renderBuilderInputs();
+  renderBuilderSteps();
+}
+
+function renderBuilderInputs() {
+  const list = $("wfBuildInputsList");
+  if (!list) return;
+  list.innerHTML = wfBuilderInputs.map((inp, idx) => `
+    <div class="wf-builder-item-row">
+      <input type="text" class="input-text" style="flex:1;" placeholder="Variable Key (e.g. topic)" value="${esc(inp.key)}" onchange="wfBuilderInputs[${idx}].key = this.value">
+      <input type="text" class="input-text" style="flex:1;" placeholder="Field Label" value="${esc(inp.label)}" onchange="wfBuilderInputs[${idx}].label = this.value">
+      <button type="button" class="ghost-btn sm-btn danger-text icon-btn" onclick="removeBuilderInput(${idx})">✕</button>
+    </div>
+  `).join("");
+}
+
+function addBuilderInputRow() {
+  wfBuilderInputs.push({ key: `param_${wfBuilderInputs.length + 1}`, label: "Parameter", type: "text", default: "" });
+  renderBuilderInputs();
+}
+
+function removeBuilderInput(idx) {
+  wfBuilderInputs.splice(idx, 1);
+  renderBuilderInputs();
+}
+
+function renderBuilderSteps() {
+  const list = $("wfBuildStepsList");
+  if (!list) return;
+  list.innerHTML = wfBuilderSteps.map((step, idx) => `
+    <div class="wf-builder-card" style="padding:14px; margin-bottom:8px; border:1px solid rgba(255,255,255,0.06);">
+      <div class="row justify-between align-center" style="margin-bottom:8px;">
+        <strong style="font-size:0.85rem; color:#f1f5f9;">Step ${idx + 1}</strong>
+        <button type="button" class="ghost-btn sm-btn danger-text icon-btn" onclick="removeBuilderStep(${idx})">✕</button>
+      </div>
+      <div class="wf-grid-2col" style="margin-bottom:8px;">
+        <input type="text" class="input-text" placeholder="Step Name" value="${esc(step.name)}" onchange="wfBuilderSteps[${idx}].name = this.value">
+        <select class="input-select" onchange="wfBuilderSteps[${idx}].type = this.value">
+          <option value="llm_generate" ${step.type === 'llm_generate' ? 'selected' : ''}>LLM Generate</option>
+          <option value="git_diff_inspect" ${step.type === 'git_diff_inspect' ? 'selected' : ''}>Git Diff Inspect</option>
+        </select>
+      </div>
+      <textarea class="input-textarea" rows="2" placeholder="Prompt template with {{inputs.var}} or {{steps.step1.output}}..." onchange="wfBuilderSteps[${idx}].prompt = this.value">${esc(step.prompt)}</textarea>
+    </div>
+  `).join("");
+}
+
+function addBuilderStepRow() {
+  wfBuilderSteps.push({
+    id: `step_${wfBuilderSteps.length + 1}`,
+    name: `Step ${wfBuilderSteps.length + 1}`,
+    type: "llm_generate",
+    prompt: ""
+  });
+  renderBuilderSteps();
+}
+
+function removeBuilderStep(idx) {
+  wfBuilderSteps.splice(idx, 1);
+  renderBuilderSteps();
+}
+
+async function saveCustomRecipe() {
+  const title = $("wfBuildTitle")?.value.trim();
+  const desc = $("wfBuildDesc")?.value.trim();
+  const category = $("wfBuildCategory")?.value || "general";
+
+  if (!title) {
+    toast("Please specify a Recipe Title.");
+    return;
+  }
+  if (wfBuilderSteps.length === 0) {
+    toast("Please add at least one execution step.");
+    return;
+  }
+
+  // Format steps with IDs
+  const formattedSteps = wfBuilderSteps.map((s, i) => ({
+    id: s.id || `step_${i + 1}`,
+    name: s.name || `Step ${i + 1}`,
+    type: s.type || "llm_generate",
+    prompt: s.prompt || ""
+  }));
+
+  try {
+    toast("Saving custom recipe...");
+    await api("/api/automation/recipes", {
+      method: "POST",
+      body: JSON.stringify({
+        title,
+        description: desc,
+        category,
+        steps: formattedSteps,
+        input_schema: wfBuilderInputs
+      })
+    });
+    toast("Custom recipe saved!");
+    switchWfTab("recipes");
+    loadWfRecipes();
+  } catch (err) {
+    toast("Failed to save recipe: " + err.message);
   }
 }
 

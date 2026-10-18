@@ -15,6 +15,7 @@ import urllib.parse
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 import requests
 from fastapi import FastAPI, Header, HTTPException, UploadFile, File, Request, Query
@@ -28,6 +29,7 @@ import knowledge_library
 import model_intelligence
 import story_studio
 import multimodal_studio
+import automation_workflows
 
 OLLAMA_URL = "http://localhost:11434"
 KEEP_ALIVE = "30m"
@@ -4628,6 +4630,214 @@ def multimodal_comfyui_gallery(workspace_id: str | None = None, x_passcode: str 
         raise HTTPException(423, "locked — unlock with passcode")
     gallery = multimodal_studio.list_generated_images(workspace_id or "ws_default")
     return {"ok": True, "gallery": gallery}
+
+
+# ==========================================================================
+# Pillar 7: Workflow Recipes & Automation Engine
+# ==========================================================================
+class RecipeSaveIn(BaseModel):
+    id: Optional[str] = None
+    title: str
+    description: str = ""
+    category: str = "general"
+    icon: str = "zap"
+    steps: List[Dict[str, Any]] = []
+    input_schema: List[Dict[str, Any]] = []
+
+class RecipeRunIn(BaseModel):
+    inputs: Dict[str, Any] = {}
+    model: Optional[str] = None
+
+class JobCreateIn(BaseModel):
+    title: str
+    job_type: str
+    params: Dict[str, Any] = {}
+    recipe_id: Optional[str] = None
+    model_name: Optional[str] = None
+
+class ScheduledTaskIn(BaseModel):
+    id: Optional[str] = None
+    name: str
+    description: str = ""
+    schedule_type: str = "interval"
+    interval_minutes: int = 60
+    daily_time: str = "09:00"
+    task_type: str = "recipe"
+    recipe_id: Optional[str] = None
+    params: Dict[str, Any] = {}
+    enabled: bool = True
+
+class ScheduledTaskToggleIn(BaseModel):
+    enabled: bool
+
+class ConnectorUpdateIn(BaseModel):
+    enabled: bool
+    approval_required: bool
+    allowed_bots: List[str]
+
+@app.get("/api/automation/recipes")
+def automation_recipes_list(category: Optional[str] = None, x_passcode: Optional[str] = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    recipes = automation_workflows.list_recipes(category)
+    return {"ok": True, "recipes": recipes}
+
+@app.get("/api/automation/recipes/{rec_id}")
+def automation_recipes_get(rec_id: str, x_passcode: Optional[str] = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    rec = automation_workflows.get_recipe(rec_id)
+    if not rec:
+        raise HTTPException(404, "Recipe not found")
+    return {"ok": True, "recipe": rec}
+
+@app.post("/api/automation/recipes")
+def automation_recipes_save(body: RecipeSaveIn, x_passcode: Optional[str] = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    saved = automation_workflows.save_recipe(
+        body.id, body.title, body.description, body.category,
+        body.steps, body.input_schema, body.icon
+    )
+    return {"ok": True, "recipe": saved}
+
+@app.delete("/api/automation/recipes/{rec_id}")
+def automation_recipes_delete(rec_id: str, x_passcode: Optional[str] = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    ok = automation_workflows.delete_recipe(rec_id)
+    if not ok:
+        raise HTTPException(400, "Cannot delete preset recipes or recipe not found.")
+    return {"ok": True}
+
+@app.post("/api/automation/recipes/{rec_id}/run")
+def automation_recipes_run(rec_id: str, body: RecipeRunIn, x_passcode: Optional[str] = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    rec = automation_workflows.get_recipe(rec_id)
+    if not rec:
+        raise HTTPException(404, "Recipe not found")
+    inputs = dict(body.inputs)
+    if body.model:
+        inputs["model"] = body.model
+    job = automation_workflows.create_job(
+        title=f"Workflow: {rec['title']}",
+        job_type="recipe",
+        params=inputs,
+        recipe_id=rec_id,
+        model_name=body.model
+    )
+    return {"ok": True, "job_id": job["id"], "job": job}
+
+@app.get("/api/automation/jobs")
+def automation_jobs_list(limit: int = 50, status: Optional[str] = None, x_passcode: Optional[str] = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    jobs = automation_workflows.list_jobs(limit=limit, status=status)
+    return {"ok": True, "jobs": jobs}
+
+@app.get("/api/automation/jobs/{job_id}")
+def automation_jobs_get(job_id: str, x_passcode: Optional[str] = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    job = automation_workflows.get_job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    return {"ok": True, "job": job}
+
+@app.post("/api/automation/jobs")
+def automation_jobs_create(body: JobCreateIn, x_passcode: Optional[str] = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    job = automation_workflows.create_job(
+        title=body.title,
+        job_type=body.job_type,
+        params=body.params,
+        recipe_id=body.recipe_id,
+        model_name=body.model_name
+    )
+    return {"ok": True, "job": job}
+
+@app.post("/api/automation/jobs/{job_id}/cancel")
+def automation_jobs_cancel(job_id: str, x_passcode: Optional[str] = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    ok = automation_workflows.cancel_job(job_id)
+    return {"ok": ok}
+
+@app.post("/api/automation/jobs/{job_id}/retry")
+def automation_jobs_retry(job_id: str, x_passcode: Optional[str] = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    job = automation_workflows.retry_job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    return {"ok": True, "job": job}
+
+@app.delete("/api/automation/jobs/{job_id}")
+def automation_jobs_delete(job_id: str, x_passcode: Optional[str] = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    ok = automation_workflows.delete_job(job_id)
+    return {"ok": ok}
+
+@app.get("/api/automation/schedules")
+def automation_schedules_list(x_passcode: Optional[str] = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    schedules = automation_workflows.list_scheduled_tasks()
+    return {"ok": True, "schedules": schedules}
+
+@app.post("/api/automation/schedules")
+def automation_schedules_save(body: ScheduledTaskIn, x_passcode: Optional[str] = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    task = automation_workflows.create_or_update_scheduled_task(
+        body.id, body.name, body.description, body.schedule_type,
+        body.interval_minutes, body.daily_time, body.task_type,
+        body.recipe_id, body.params, body.enabled
+    )
+    return {"ok": True, "task": task}
+
+@app.post("/api/automation/schedules/{task_id}/toggle")
+def automation_schedules_toggle(task_id: str, body: ScheduledTaskToggleIn, x_passcode: Optional[str] = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    ok = automation_workflows.toggle_scheduled_task(task_id, body.enabled)
+    return {"ok": ok}
+
+@app.post("/api/automation/schedules/{task_id}/run-now")
+def automation_schedules_run_now(task_id: str, x_passcode: Optional[str] = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    try:
+        res = automation_workflows.trigger_scheduled_task_now(task_id)
+        return res
+    except Exception as e:
+        raise HTTPException(400, str(e))
+
+@app.delete("/api/automation/schedules/{task_id}")
+def automation_schedules_delete(task_id: str, x_passcode: Optional[str] = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    ok = automation_workflows.delete_scheduled_task(task_id)
+    return {"ok": ok}
+
+@app.get("/api/automation/connectors")
+def automation_connectors_list(x_passcode: Optional[str] = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    connectors = automation_workflows.list_connectors()
+    return {"ok": True, "connectors": connectors}
+
+@app.post("/api/automation/connectors/{connector_id}")
+def automation_connectors_update(connector_id: str, body: ConnectorUpdateIn, x_passcode: Optional[str] = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    ok = automation_workflows.update_connector_settings(
+        connector_id, body.enabled, body.approval_required, body.allowed_bots
+    )
+    return {"ok": ok}
 
 
 # ==========================================================================

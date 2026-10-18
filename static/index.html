@@ -313,6 +313,20 @@
                 <span>Vision Workspace, Screenshot Debugger, Audio Notes &amp; ComfyUI</span>
               </div>
             </button>
+            <button class="workbench-menu-item" type="button" id="wbItemWorkflowAutomation">
+              <span class="wb-item-icon wb-icon-amber" style="color:#f59e0b; background:rgba(245,158,11,0.15); border-color:rgba(245,158,11,0.3);">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                </svg>
+              </span>
+              <div class="wb-item-info">
+                <div class="wb-item-title-row">
+                  <strong>Workflow &amp; Automation</strong>
+                  <span class="wb-badge wb-badge-amber" style="background:rgba(245,158,11,0.2); color:#fbbf24; border:1px solid rgba(245,158,11,0.4);">RECIPES &amp; JOBS</span>
+                </div>
+                <span>Pipelines, background job queue, scheduled tasks &amp; connectors</span>
+              </div>
+            </button>
           </div>
           <div class="workbench-dropdown-divider"></div>
           <div class="workbench-dropdown-section">
@@ -4162,6 +4176,285 @@
     <div class="modal-footer mm-modal-footer">
       <span id="mmFooterStatus" class="muted" style="flex:1;font-size:0.75rem;">Pillar 6 Multimodal Studio Active • 100% Local Inference</span>
       <button id="btnDismissMultimodalStudioModal" class="ghost" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Pillar 7 Workflow Recipes & Automation Engine -->
+<div id="workflowAutomationModal" class="veil hidden">
+  <div class="veil-card wf-modal-card">
+    <!-- Modal Header -->
+    <div class="modal-header wf-modal-header">
+      <div class="modal-title-group">
+        <div class="row align-center gap-10">
+          <span class="wf-title-icon" style="color:#f59e0b; background:rgba(245,158,11,0.15); border:1px solid rgba(245,158,11,0.3); border-radius:8px; width:36px; height:36px; display:flex; align-items:center; justify-content:center;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            </svg>
+          </span>
+          <div>
+            <h2 class="modal-title" style="margin:0; font-size:1.15rem; font-weight:600;">Workflow Recipes &amp; Automation</h2>
+            <p class="modal-subtitle" style="margin:0; font-size:0.8rem; color:var(--text-muted);">Reusable Multi-Step Pipelines, Persistent Job Queue, Schedulers &amp; Connector Registry</p>
+          </div>
+        </div>
+      </div>
+      <button id="btnCloseWorkflowAutomationModal" class="ghost-btn icon-btn" title="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="wf-modal-nav">
+      <button type="button" class="wf-nav-tab active" data-tab="recipes" id="wfTabBtnRecipes">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+        Workflow Recipes
+      </button>
+      <button type="button" class="wf-nav-tab" data-tab="jobs" id="wfTabBtnJobs">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+        Background Jobs
+        <span id="wfJobActiveCountBadge" class="wf-badge-count hidden">0</span>
+      </button>
+      <button type="button" class="wf-nav-tab" data-tab="schedules" id="wfTabBtnSchedules">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+        Scheduled Tasks
+      </button>
+      <button type="button" class="wf-nav-tab" data-tab="connectors" id="wfTabBtnConnectors">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
+        Tool Connectors
+      </button>
+      <button type="button" class="wf-nav-tab" data-tab="builder" id="wfTabBtnBuilder">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        Recipe Builder
+      </button>
+    </div>
+
+    <!-- Tab Contents -->
+    <div class="wf-modal-body">
+      <!-- TAB 1: WORKFLOW RECIPES -->
+      <div id="wfTabContentRecipes" class="wf-tab-pane active">
+        <!-- Top filter and controls -->
+        <div class="wf-toolbar-row">
+          <div class="wf-filter-pills" id="wfRecipeFilterPills">
+            <button type="button" class="wf-pill active" data-category="all">All</button>
+            <button type="button" class="wf-pill" data-category="research">Research</button>
+            <button type="button" class="wf-pill" data-category="engineering">Engineering</button>
+            <button type="button" class="wf-pill" data-category="creative">Creative</button>
+            <button type="button" class="wf-pill" data-category="batch">Batch / Audio</button>
+          </div>
+          <button type="button" class="primary-btn sm-btn" id="btnWfGoToBuilder">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            Create Recipe
+          </button>
+        </div>
+
+        <!-- Recipe Cards Grid View -->
+        <div id="wfRecipesListView">
+          <div id="wfRecipesGrid" class="wf-recipes-grid">
+            <div class="muted center-text" style="grid-column: 1/-1; padding: 30px;">Loading workflow recipes...</div>
+          </div>
+        </div>
+
+        <!-- Run Recipe Drawer / Inspector -->
+        <div id="wfRunRecipeDrawer" class="wf-run-drawer hidden">
+          <div class="wf-run-drawer-head">
+            <button type="button" class="ghost-btn sm-btn" id="btnBackToRecipesList">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+              Back to Recipes
+            </button>
+            <div class="wf-run-title-group">
+              <h3 id="wfRunRecipeTitle" style="margin:0;">Recipe Title</h3>
+              <span id="wfRunRecipeCategory" class="badge">category</span>
+            </div>
+          </div>
+          <p id="wfRunRecipeDesc" class="muted" style="margin:8px 0 15px 0; font-size:0.85rem;"></p>
+
+          <div class="wf-run-body-grid">
+            <!-- Left side: Inputs form -->
+            <div class="wf-run-inputs-card">
+              <h4 style="margin:0 0 10px 0;">Pipeline Parameters</h4>
+              <div id="wfRunInputsContainer" class="wf-inputs-container"></div>
+              <div class="wf-field-group" style="margin-top:12px;">
+                <label for="wfRunModelSelect" style="display:block; font-size:0.75rem; margin-bottom:4px; color:var(--text-muted);">Model Override</label>
+                <select id="wfRunModelSelect" class="input-select" style="width:100%;">
+                  <option value="">Default Recommended</option>
+                </select>
+              </div>
+              <div style="margin-top:20px; display:flex; gap:10px;">
+                <button type="button" class="primary-btn" id="btnExecuteRecipeNow" style="flex:1;">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                  Dispatch Background Job
+                </button>
+              </div>
+            </div>
+            <!-- Right side: Steps preview -->
+            <div class="wf-run-steps-card">
+              <h4 style="margin:0 0 10px 0;">Execution Pipeline Steps</h4>
+              <div id="wfRunStepsList" class="wf-steps-preview-list"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 2: BACKGROUND JOBS -->
+      <div id="wfTabContentJobs" class="wf-tab-pane">
+        <div class="wf-toolbar-row">
+          <div class="wf-filter-pills" id="wfJobStatusFilterPills">
+            <button type="button" class="wf-pill active" data-status="">All</button>
+            <button type="button" class="wf-pill" data-status="running">Running</button>
+            <button type="button" class="wf-pill" data-status="queued">Queued</button>
+            <button type="button" class="wf-pill" data-status="completed">Completed</button>
+            <button type="button" class="wf-pill" data-status="failed">Failed</button>
+          </div>
+          <div class="row gap-8">
+            <button type="button" class="ghost-btn sm-btn" id="btnRefreshJobs">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        <div class="wf-jobs-split-layout">
+          <!-- Jobs List Table / Cards -->
+          <div class="wf-jobs-list-panel">
+            <div id="wfJobsListContainer" class="wf-jobs-list">
+              <div class="muted center-text" style="padding: 30px;">Loading background jobs...</div>
+            </div>
+          </div>
+
+          <!-- Job Detail & Step Log Inspector Drawer -->
+          <div id="wfJobDetailDrawer" class="wf-job-detail-panel hidden">
+            <div class="wf-detail-header">
+              <div class="row align-center gap-10">
+                <span id="wfDetailStatusBadge" class="wf-job-badge">RUNNING</span>
+                <h4 id="wfDetailJobTitle" style="margin:0; font-size:0.95rem;">Job Details</h4>
+              </div>
+              <div class="row gap-8 align-center">
+                <button type="button" class="ghost-btn sm-btn danger-text" id="btnCancelActiveJob" title="Cancel Job">Cancel</button>
+                <button type="button" class="ghost-btn sm-btn" id="btnRetryFailedJob" title="Retry Job">Retry</button>
+                <button type="button" class="ghost-btn sm-btn icon-btn" id="btnCloseJobDetail" title="Close Panel">✕</button>
+              </div>
+            </div>
+            <div class="wf-progress-banner">
+              <div class="wf-progress-bar-bg">
+                <div id="wfDetailProgressBar" class="wf-progress-bar-fill" style="width: 0%;"></div>
+              </div>
+              <div class="row justify-between" style="font-size:0.75rem; margin-top:4px;">
+                <span id="wfDetailProgressLabel" class="muted">Initializing...</span>
+                <span id="wfDetailProgressPct">0%</span>
+              </div>
+            </div>
+
+            <!-- Tabs inside job detail: Realtime Logs vs Result Output -->
+            <div class="wf-subtabs">
+              <button type="button" class="wf-subtab active" data-subtab="logs" id="btnSubtabJobLogs">Execution Logs</button>
+              <button type="button" class="wf-subtab" data-subtab="output" id="btnSubtabJobOutput">Artifact Output</button>
+            </div>
+
+            <div id="wfJobDetailLogsView" class="wf-terminal-view">
+              <div id="wfJobLogsTerminal" class="wf-terminal-content">Waiting for log records...</div>
+            </div>
+
+            <div id="wfJobDetailOutputView" class="wf-output-view hidden">
+              <div class="wf-output-toolbar">
+                <button type="button" class="ghost-btn sm-btn" id="btnCopyJobOutput">Copy Markdown</button>
+              </div>
+              <div id="wfJobOutputContent" class="wf-rendered-markdown">No output generated yet.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: SCHEDULED TASKS -->
+      <div id="wfTabContentSchedules" class="wf-tab-pane">
+        <div class="wf-toolbar-row">
+          <div>
+            <p class="muted" style="margin:0; font-size:0.85rem;">Automated recurring tasks execute silently in the background with full history.</p>
+          </div>
+          <button type="button" class="primary-btn sm-btn" id="btnOpenNewScheduleModal">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            New Scheduled Task
+          </button>
+        </div>
+
+        <div id="wfSchedulesContainer" class="wf-schedules-grid">
+          <div class="muted center-text" style="grid-column: 1/-1; padding: 30px;">Loading automated schedules...</div>
+        </div>
+      </div>
+
+      <!-- TAB 4: TOOL CONNECTORS REGISTRY -->
+      <div id="wfTabContentConnectors" class="wf-tab-pane">
+        <div class="wf-toolbar-row">
+          <div>
+            <p class="muted" style="margin:0; font-size:0.85rem;">Central permissions registry for Git, Terminal, local filesystems, notes vaults, and external tool bridges.</p>
+          </div>
+          <button type="button" class="ghost-btn sm-btn" id="btnRefreshConnectors">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+            Refresh Status
+          </button>
+        </div>
+
+        <div id="wfConnectorsContainer" class="wf-connectors-grid">
+          <div class="muted center-text" style="grid-column: 1/-1; padding: 30px;">Loading tool connectors...</div>
+        </div>
+      </div>
+
+      <!-- TAB 5: CUSTOM RECIPE BUILDER -->
+      <div id="wfTabContentBuilder" class="wf-tab-pane">
+        <div class="wf-builder-layout">
+          <div class="wf-builder-card">
+            <h4 style="margin:0 0 12px 0;">Recipe Metadata</h4>
+            <div class="wf-grid-2col">
+              <div class="wf-field-group">
+                <label>Recipe Title</label>
+                <input type="text" id="wfBuildTitle" class="input-text" placeholder="e.g. Code Vulnerability Scanner">
+              </div>
+              <div class="wf-field-group">
+                <label>Category</label>
+                <select id="wfBuildCategory" class="input-select">
+                  <option value="research">Research</option>
+                  <option value="engineering">Engineering</option>
+                  <option value="creative">Creative</option>
+                  <option value="batch">Batch / Audio</option>
+                  <option value="utility">General Utility</option>
+                </select>
+              </div>
+            </div>
+            <div class="wf-field-group" style="margin-top:10px;">
+              <label>Description</label>
+              <textarea id="wfBuildDesc" class="input-textarea" rows="2" placeholder="Explain what this multi-step pipeline accomplishes..."></textarea>
+            </div>
+
+            <div class="divider" style="margin: 20px 0;"></div>
+
+            <div class="row justify-between align-center" style="margin-bottom:10px;">
+              <h4 style="margin:0;">Input Variables</h4>
+              <button type="button" class="ghost-btn sm-btn" id="btnAddBuildInput">+ Add Variable</button>
+            </div>
+            <p class="muted" style="font-size:0.75rem; margin-top:-5px; margin-bottom:12px;">Variables can be referenced in step prompts via <code>{{inputs.variable_key}}</code>.</p>
+            <div id="wfBuildInputsList" class="wf-builder-items-list"></div>
+
+            <div class="divider" style="margin: 20px 0;"></div>
+
+            <div class="row justify-between align-center" style="margin-bottom:10px;">
+              <h4 style="margin:0;">Pipeline Execution Steps</h4>
+              <button type="button" class="ghost-btn sm-btn" id="btnAddBuildStep">+ Add Step</button>
+            </div>
+            <p class="muted" style="font-size:0.75rem; margin-top:-5px; margin-bottom:12px;">Reference outputs from previous steps using <code>{{steps.step_id.output}}</code>.</p>
+            <div id="wfBuildStepsList" class="wf-builder-items-list"></div>
+
+            <div style="margin-top:25px; display:flex; gap:12px; justify-content:flex-end;">
+              <button type="button" class="ghost-btn" id="btnResetRecipeBuilder">Reset</button>
+              <button type="button" class="primary-btn" id="btnSaveCustomRecipe">Save Recipe</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Footer -->
+    <div class="modal-footer wf-modal-footer">
+      <span id="wfFooterStatus" class="muted" style="flex:1;font-size:0.75rem;">Pillar 7 Automation Engine Active • In-Process Worker &amp; Scheduler Daemons Online</span>
+      <button id="btnDismissWorkflowAutomationModal" class="ghost" type="button">Close</button>
     </div>
   </div>
 </div>
