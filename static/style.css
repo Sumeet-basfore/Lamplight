@@ -1056,7 +1056,7 @@ body.sessions-collapsed .glass-cartridge-bay {
 
 #chat {
   width: 100%;
-  max-width: 920px;
+  max-width: min(1180px, 100%);
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -1065,7 +1065,7 @@ body.sessions-collapsed .glass-cartridge-bay {
 /* Cyber Hero Welcome State */
 .cyber-hero {
   width: 100%;
-  max-width: 920px;
+  max-width: min(1180px, 100%);
   margin: auto 0;
   display: flex;
   flex-direction: column;
@@ -1606,7 +1606,7 @@ body.sessions-collapsed .glass-cartridge-bay {
 }
 .composer-inner-wrap {
   width: 100%;
-  max-width: 920px;
+  max-width: min(1180px, 100%);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1945,7 +1945,7 @@ body.sessions-collapsed .glass-cartridge-bay {
   border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:10px 14px 10px;
   box-shadow:0 8px 32px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.05);
   transition:border-color .22s var(--spring), box-shadow .22s var(--spring);
-  display:flex;flex-direction:column;gap:6px;max-width:920px;margin:0 auto;width:100%;
+  display:flex;flex-direction:column;gap:6px;max-width:min(1180px,100%);margin:0 auto;width:100%;
 }
 .composer-card:focus-within{
   border-color:rgba(240,168,50,.35);
@@ -2353,7 +2353,7 @@ body[data-mode="muse"] .comp-btn-send:hover{box-shadow:0 4px 16px rgba(244,63,94
 
 .attachment-tray{
   display:flex;flex-wrap:wrap;gap:8px;padding:6px 4px 8px;max-height:120px;
-  overflow-y:auto;max-width:880px;margin:0 auto;width:100%;
+  overflow-y:auto;max-width:min(1180px, 100%);margin:0 auto;width:100%;
 }
 .attachment-pill{
   display:flex;align-items:center;gap:8px;padding:5px 10px;border-radius:10px;
@@ -2374,7 +2374,7 @@ body[data-mode="muse"] .comp-btn-send:hover{box-shadow:0 4px 16px rgba(244,63,94
 
 .recording-bar{
   display:flex;align-items:center;gap:10px;padding:4px 6px 6px;
-  font-size:.85em;color:#f43f5e;max-width:880px;margin:0 auto;width:100%;
+  font-size:.85em;color:#f43f5e;max-width:min(1180px, 100%);margin:0 auto;width:100%;
 }
 .rec-dot{
   width:8px;height:8px;border-radius:50%;background:#f43f5e;
@@ -2797,8 +2797,8 @@ body[data-mode="muse"]{--mode:#f43f5e;--mode-shade:#be123c;--mode-soft:rgba(244,
 /* ---------- chess arena ---------- */
 #chessView{width:100%;flex:1;overflow-y:auto;padding:16px 18px 40px;display:flex;flex-direction:column;gap:12px;align-items:center;min-height:0}
 main.arena-mode, main.lab-mode {
-  max-width: 1200px;
-  width: 96vw;
+  max-width: min(1440px, 96vw) !important;
+  width: 96vw !important;
   transition: max-width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 #chessModes{display:flex;gap:8px;align-items:center;flex-shrink:0}
@@ -3611,23 +3611,24 @@ main.canvas-open {
   transition: flex 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 main.canvas-open .chat-pane {
-  flex: 1 1 48%;
+  flex: 1 1 42%;
+  min-width: 340px;
 }
 
 .canvas-panel {
-  flex: 1 1 52%;
-  min-width: 380px;
+  flex: 1 1 58%;
+  min-width: 440px;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: rgba(12, 15, 24, 0.92);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(12, 15, 24, 0.94);
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 18px;
-  margin: 6px 6px 12px 0;
+  margin: 6px 10px 12px 0;
   overflow: hidden;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.1);
   animation: canvasSlideIn 0.3s var(--spring) both;
   position: relative;
   z-index: 20;
@@ -6636,14 +6637,14 @@ main.canvas-open .chat-pane {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  width: 310px;
-  background: rgba(14, 18, 30, 0.96);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 14px;
+  width: 340px;
+  background: rgba(10, 14, 26, 0.96) !important;
+  backdrop-filter: blur(28px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(160%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 16px;
   padding: 8px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 24px rgba(240, 168, 50, 0.12) !important;
   z-index: 100;
   animation: wbDropdownIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
@@ -6657,10 +6658,11 @@ main.canvas-open .chat-pane {
 .workbench-dropdown-section {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 .workbench-dropdown-header {
-  font-size: 0.68rem;
+  font-family: var(--mono);
+  font-size: 0.65rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -6675,38 +6677,92 @@ main.canvas-open .chat-pane {
 .workbench-menu-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
-  padding: 8px 10px;
-  border-radius: 8px;
+  padding: 9px 12px;
+  border-radius: 10px;
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
   cursor: pointer;
   text-align: left;
-  transition: all 0.15s ease;
+  transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .workbench-menu-item:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.09);
+  transform: translateX(3px);
 }
 .wb-item-icon {
-  font-size: 1.15rem;
-  width: 26px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
+.wb-icon-cyan {
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.15);
+}
+.wb-icon-amber {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  box-shadow: 0 0 10px rgba(251, 191, 36, 0.15);
+}
+.wb-icon-emerald {
+  background: rgba(52, 211, 153, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  box-shadow: 0 0 10px rgba(52, 211, 153, 0.15);
+}
+.wb-icon-blue {
+  background: rgba(96, 165, 250, 0.12);
+  color: #60a5fa;
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  box-shadow: 0 0 10px rgba(96, 165, 250, 0.15);
+}
+.wb-icon-rose {
+  background: rgba(244, 63, 94, 0.12);
+  color: #f43f5e;
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  box-shadow: 0 0 10px rgba(244, 63, 94, 0.15);
+}
 .wb-item-info {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  flex: 1;
+  gap: 2px;
+}
+.wb-item-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 .wb-item-info strong {
   font-size: 0.84rem;
   color: #f8fafc;
   font-weight: 600;
 }
-.wb-item-info span {
+.wb-badge {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.wb-badge-cyan { background: rgba(56, 189, 248, 0.16); color: #7dd3fc; border: 1px solid rgba(56, 189, 248, 0.35); }
+.wb-badge-amber { background: rgba(251, 191, 36, 0.16); color: #fde68a; border: 1px solid rgba(251, 191, 36, 0.35); }
+.wb-badge-emerald { background: rgba(52, 211, 153, 0.16); color: #a7f3d0; border: 1px solid rgba(52, 211, 153, 0.35); }
+.wb-badge-blue { background: rgba(96, 165, 250, 0.16); color: #bfdbfe; border: 1px solid rgba(96, 165, 250, 0.35); }
+.wb-badge-rose { background: rgba(244, 63, 94, 0.16); color: #fecdd3; border: 1px solid rgba(244, 63, 94, 0.35); }
+.wb-item-info span:not(.wb-badge) {
   font-size: 0.71rem;
   color: #94a3b8;
   white-space: nowrap;
