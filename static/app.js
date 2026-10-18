@@ -871,7 +871,7 @@ function showApp() {
   $("btnMemory").classList.toggle("hidden", mode !== "friend");
   if ($("btnArchitectStack")) $("btnArchitectStack").classList.toggle("hidden", mode !== "architect");
   if ($("btnMuseBible")) $("btnMuseBible").classList.toggle("hidden", mode !== "muse");
-  wireTabs(); moveGlow(); loadPicker(); loadHistory(); loadSessions(mode); loadVramStatus(); wireThemes(); loadSkills(); wireSkills(); wireTts(); loadTtsSettings(); initTranscriptModal(); wireCanvas(); wireLab(); wireArena(); wireProviderForm(); wireDocHub(); wireObservatory(); wirePrompts(); wireWorkbenchMenu(); wireArchitect(); wireMuse(); wireThinkingLevels(); wireModelCartridge(); wireWebSearch(); wireTreg(); wireWorkspaces(); loadWorkspaces(); wireMemoryCenter(); wireBackups();
+  wireTabs(); moveGlow(); loadPicker(); loadHistory(); loadSessions(mode); loadVramStatus(); wireThemes(); loadSkills(); wireSkills(); wireTts(); loadTtsSettings(); initTranscriptModal(); wireCanvas(); wireLab(); wireArena(); wireProviderForm(); wireDocHub(); wireObservatory(); wirePrompts(); wireWorkbenchMenu(); wireArchitect(); wireMuse(); wireThinkingLevels(); wireModelCartridge(); wireWebSearch(); wireTreg(); wireWorkspaces(); loadWorkspaces(); wireMemoryCenter(); wireBackups(); wireDevWorkbench();
 }
 
 document.addEventListener("click", (e) => {
@@ -4407,6 +4407,14 @@ function wireArchitect() {
       } catch (err) {
         toast("Clear failed: " + err.message, true);
       }
+    };
+  }
+
+  const btnOpenDev = $("btnArchitectOpenDevWorkbench");
+  if (btnOpenDev) {
+    btnOpenDev.onclick = () => {
+      closeDrawers();
+      openDevWorkbench();
     };
   }
 }
@@ -7973,6 +7981,12 @@ function wireWorkbenchMenu() {
     closeDrawers();
     openBackupModal();
   });
+
+  $("wbItemDevWorkbench")?.addEventListener("click", () => {
+    closeWorkbenchMenu();
+    closeDrawers();
+    openDevWorkbench();
+  });
   // Global pill active state handling
   document.addEventListener("click", (e) => {
     const pill = e.target.closest(".cyber-pill");
@@ -8668,6 +8682,511 @@ async function loadBackups() {
     });
   } catch (err) {
     console.error("loadBackups error:", err);
+  }
+}
+
+/* ==========================================================================
+   Phase 2: Developer Workbench & Local Repository Intelligence
+   ========================================================================== */
+
+let devSelectedFile = null;
+let devTreeData = [];
+let devActiveTab = "status";
+
+function wireDevWorkbench() {
+  const modal = $("devWorkbenchModal");
+  if (!modal) return;
+
+  $("btnCloseDevWorkbenchModal")?.addEventListener("click", () => modal.classList.add("hidden"));
+  $("btnDismissDevWorkbenchModal")?.addEventListener("click", () => modal.classList.add("hidden"));
+  $("btnRefreshDevWorkbench")?.addEventListener("click", () => refreshDevWorkbench());
+
+  // Tabs
+  document.querySelectorAll(".dev-tab").forEach(tabBtn => {
+    tabBtn.addEventListener("click", () => {
+      document.querySelectorAll(".dev-tab").forEach(t => t.classList.remove("active"));
+      tabBtn.classList.add("active");
+      const tabName = tabBtn.getAttribute("data-tab");
+      devActiveTab = tabName;
+
+      document.querySelectorAll(".dev-pane").forEach(p => p.classList.remove("active"));
+      const paneId = `devPane${tabName.charAt(0).toUpperCase() + tabName.slice(1)}`;
+      const targetPane = $(paneId);
+      if (targetPane) targetPane.classList.add("active");
+
+      if (tabName === "tree" && (!devTreeData || !devTreeData.length)) {
+        loadDevTree();
+      } else if (tabName === "status") {
+        loadDevStatus();
+      } else if (tabName === "patch") {
+        loadDevBackups();
+      }
+    });
+  });
+
+  // Staged diff checkbox
+  $("devDiffStagedCheck")?.addEventListener("change", () => {
+    if (devSelectedFile) loadDevDiff(devSelectedFile);
+  });
+
+  // Tree filter
+  $("devTreeFilterInput")?.addEventListener("input", (e) => {
+    filterDevTree(e.target.value.trim().toLowerCase());
+  });
+
+  // Copy file path
+  $("btnDevCopyFilePath")?.addEventListener("click", () => {
+    const p = $("devPreviewPath")?.textContent;
+    if (p && p !== "Select a file to preview") {
+      navigator.clipboard?.writeText(p);
+      toast("File path copied to clipboard.");
+    }
+  });
+
+  // Command Runner Presets
+  document.querySelectorAll(".dev-cmd-preset").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const cmd = btn.getAttribute("data-cmd");
+      const input = $("devCmdInput");
+      if (input && cmd) {
+        input.value = cmd;
+        runDevCmd();
+      }
+    });
+  });
+
+  // Run command
+  $("btnRunDevCmd")?.addEventListener("click", () => runDevCmd());
+  $("devCmdInput")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      runDevCmd();
+    }
+  });
+
+  // Clear terminal
+  $("btnDevClearTerm")?.addEventListener("click", () => {
+    const consoleEl = $("devTerminalConsole");
+    if (consoleEl) consoleEl.textContent = "Lamplight Terminal Ready. Enter a command above to execute inside repo.";
+    const meta = $("devTermMeta");
+    if (meta) meta.textContent = "";
+    const badge = $("devTermStatusBadge");
+    if (badge) {
+      badge.className = "dev-term-badge";
+      badge.textContent = "Ready";
+    }
+  });
+
+  // Apply Patch
+  $("btnApplyDevPatch")?.addEventListener("click", () => applyDevPatch());
+}
+
+function openDevWorkbench() {
+  const modal = $("devWorkbenchModal");
+  if (!modal) return;
+  modal.classList.remove("hidden");
+  refreshDevWorkbench();
+}
+
+function refreshDevWorkbench() {
+  if (devActiveTab === "tree") {
+    loadDevTree();
+  } else if (devActiveTab === "patch") {
+    loadDevBackups();
+  } else {
+    loadDevStatus();
+  }
+}
+
+async function loadDevStatus() {
+  const footer = $("devWorkbenchFooterMsg");
+  try {
+    const wsParam = activeWorkspaceId ? `?workspace_id=${encodeURIComponent(activeWorkspaceId)}` : "";
+    const j = await api(`/api/dev/status${wsParam}`).catch(err => ({ error: err.message }));
+    if (!j || j.error) {
+      if (footer) footer.textContent = `Error: ${j?.error || "Could not fetch git status"}`;
+      return;
+    }
+
+    if ($("devWorkbenchRepoPath")) $("devWorkbenchRepoPath").textContent = j.repo_path || "Unknown";
+    if ($("devWorkbenchBranchBadge")) $("devWorkbenchBranchBadge").textContent = `git: ${j.branch || "detached"}`;
+
+    const dirtyBadge = $("devWorkbenchDirtyBadge");
+    if (dirtyBadge) {
+      dirtyBadge.classList.toggle("hidden", !j.is_dirty);
+    }
+
+    // Head commit
+    const commitCard = $("devCommitSummary");
+    if (commitCard && j.head_commit) {
+      commitCard.innerHTML = `<strong>${esc(j.head_commit.hash)}</strong> - ${esc(j.head_commit.message)}<br><span class="muted">${esc(j.head_commit.author)} · ${esc(j.head_commit.date)}</span>`;
+    } else if (commitCard) {
+      commitCard.textContent = "No commits yet or non-git directory.";
+    }
+
+    // Changed files
+    const listEl = $("devChangedFilesList");
+    const counterEl = $("devChangedCount");
+    const dirtyFiles = j.dirty_files || [];
+    const untrackedFiles = j.untracked_files || [];
+    const allChanged = [
+      ...dirtyFiles.map(f => ({ path: f.path, status: f.status })),
+      ...untrackedFiles.map(f => ({ path: f, status: "?" }))
+    ];
+
+    if (counterEl) counterEl.textContent = allChanged.length;
+    if (listEl) {
+      listEl.innerHTML = "";
+      if (!allChanged.length) {
+        listEl.innerHTML = '<div class="muted" style="padding:14px;text-align:center;font-size:0.75rem;">Working tree is clean.</div>';
+        if ($("devDiffOutput")) $("devDiffOutput").textContent = "No working tree modifications detected.";
+        if ($("devDiffFileLabel")) $("devDiffFileLabel").textContent = "Working tree clean";
+        devSelectedFile = null;
+      } else {
+        allChanged.forEach(f => {
+          const item = document.createElement("button");
+          item.type = "button";
+          item.className = "dev-file-item";
+          if (devSelectedFile === f.path) item.classList.add("active");
+          const tagClass = f.status === "M" ? "status-tag-M" : (f.status === "A" ? "status-tag-A" : (f.status === "D" ? "status-tag-D" : "status-tag-Q"));
+          item.innerHTML = `<span class="dev-file-status-tag ${tagClass}">${esc(f.status)}</span><span class="dev-file-name" title="${esc(f.path)}">${esc(f.path)}</span>`;
+          item.onclick = () => {
+            document.querySelectorAll(".dev-file-item").forEach(el => el.classList.remove("active"));
+            item.classList.add("active");
+            devSelectedFile = f.path;
+            loadDevDiff(f.path);
+          };
+          listEl.appendChild(item);
+        });
+
+        // Auto select first file if none selected
+        if (!devSelectedFile || !allChanged.some(f => f.path === devSelectedFile)) {
+          devSelectedFile = allChanged[0].path;
+          listEl.firstChild?.classList.add("active");
+        }
+        if (devSelectedFile) {
+          loadDevDiff(devSelectedFile);
+        }
+      }
+    }
+
+    if (footer) {
+      const trackingText = j.tracking ? (j.tracking.ahead > 0 || j.tracking.behind > 0 ? ` · Sync: ${j.tracking.ahead} ahead, ${j.tracking.behind} behind` : " · Up-to-date with remote") : "";
+      footer.textContent = `Git repository active${trackingText}`;
+    }
+  } catch (err) {
+    if (footer) footer.textContent = `Error: ${err.message}`;
+  }
+}
+
+async function loadDevDiff(filepath) {
+  if (!filepath) return;
+  const label = $("devDiffFileLabel");
+  const output = $("devDiffOutput");
+  if (label) label.textContent = filepath;
+  if (output) output.textContent = "Loading diff…";
+
+  const staged = $("devDiffStagedCheck")?.checked ? "true" : "false";
+  const wsParam = activeWorkspaceId ? `&workspace_id=${encodeURIComponent(activeWorkspaceId)}` : "";
+
+  try {
+    const j = await api(`/api/dev/diff?filepath=${encodeURIComponent(filepath)}&staged=${staged}${wsParam}`);
+    const rawDiff = j.diff || "";
+    if (!rawDiff.trim()) {
+      if (output) output.textContent = `No ${staged === "true" ? "staged" : "unstaged"} diff for ${filepath}.`;
+      return;
+    }
+
+    // Colorize diff lines
+    const lines = rawDiff.split("\n");
+    const htmlLines = lines.map(line => {
+      const eLine = esc(line);
+      if (line.startsWith("+") && !line.startsWith("+++")) {
+        return `<span class="diff-line-add">${eLine}</span>`;
+      } else if (line.startsWith("-") && !line.startsWith("---")) {
+        return `<span class="diff-line-del">${eLine}</span>`;
+      } else if (line.startsWith("@@")) {
+        return `<span class="diff-line-hunk">${eLine}</span>`;
+      } else if (line.startsWith("diff ") || line.startsWith("index ") || line.startsWith("--- ") || line.startsWith("+++ ")) {
+        return `<span class="diff-line-meta">${eLine}</span>`;
+      }
+      return `<span>${eLine}</span>`;
+    });
+
+    if (output) output.innerHTML = htmlLines.join("\n");
+  } catch (err) {
+    if (output) output.textContent = `Error loading diff: ${err.message}`;
+  }
+}
+
+async function loadDevTree(subpath = "") {
+  const container = $("devTreeList");
+  if (!container) return;
+  container.innerHTML = '<div class="muted" style="padding:14px;text-align:center;font-size:0.75rem;">Loading file tree…</div>';
+
+  try {
+    const wsParam = activeWorkspaceId ? `&workspace_id=${encodeURIComponent(activeWorkspaceId)}` : "";
+    const j = await api(`/api/dev/tree?subpath=${encodeURIComponent(subpath)}${wsParam}`);
+    devTreeData = j.tree || [];
+    renderDevTree(devTreeData);
+  } catch (err) {
+    container.innerHTML = `<div class="muted" style="padding:14px;color:#f87171;font-size:0.75rem;">Failed to load file tree: ${esc(err.message)}</div>`;
+  }
+}
+
+function renderDevTree(items, filterTerm = "") {
+  const container = $("devTreeList");
+  if (!container) return;
+  container.innerHTML = "";
+
+  const filtered = filterTerm
+    ? items.filter(i => i.name.toLowerCase().includes(filterTerm) || i.path.toLowerCase().includes(filterTerm))
+    : items;
+
+  if (!filtered.length) {
+    container.innerHTML = '<div class="muted" style="padding:14px;text-align:center;font-size:0.75rem;">No matching files.</div>';
+    return;
+  }
+
+  // Sort: directories first, then files
+  const sorted = [...filtered].sort((a, b) => {
+    if (a.is_dir === b.is_dir) return a.name.localeCompare(b.name);
+    return a.is_dir ? -1 : 1;
+  });
+
+  sorted.forEach(node => {
+    const row = document.createElement("div");
+    row.className = "dev-tree-node";
+    const icon = node.is_dir ? "📁" : (node.name.endsWith(".py") ? "🐍" : (node.name.endsWith(".js") ? "⚡" : (node.name.endsWith(".html") ? "🌐" : (node.name.endsWith(".css") ? "🎨" : "📄"))));
+    row.innerHTML = `<span class="dev-tree-icon">${icon}</span><span class="dev-tree-name" title="${esc(node.path)}">${esc(node.name)}</span>`;
+
+    row.onclick = () => {
+      document.querySelectorAll(".dev-tree-node").forEach(el => el.classList.remove("active"));
+      row.classList.add("active");
+      if (!node.is_dir) {
+        loadDevFile(node.path);
+      }
+    };
+
+    container.appendChild(row);
+  });
+}
+
+function filterDevTree(term) {
+  renderDevTree(devTreeData, term);
+}
+
+async function loadDevFile(relPath) {
+  const pathLabel = $("devPreviewPath");
+  const sizeLabel = $("devPreviewSize");
+  const contentEl = $("devFileContent");
+
+  if (pathLabel) pathLabel.textContent = relPath;
+  if (sizeLabel) sizeLabel.textContent = "Loading…";
+  if (contentEl) contentEl.textContent = "Loading file content…";
+
+  try {
+    const wsParam = activeWorkspaceId ? `&workspace_id=${encodeURIComponent(activeWorkspaceId)}` : "";
+    const j = await api(`/api/dev/file?path=${encodeURIComponent(relPath)}${wsParam}`);
+    if (j.error) {
+      if (contentEl) contentEl.textContent = `Error reading file: ${j.error}`;
+      return;
+    }
+
+    if (sizeLabel) {
+      const kb = ((j.size_bytes || 0) / 1024).toFixed(1);
+      sizeLabel.textContent = `${kb} KB · ${j.line_count || 0} lines`;
+    }
+    if (contentEl) {
+      contentEl.textContent = j.content || "(Empty file)";
+    }
+  } catch (err) {
+    if (contentEl) contentEl.textContent = `Failed to read file: ${err.message}`;
+  }
+}
+
+async function runDevCmd() {
+  const input = $("devCmdInput");
+  const cmd = input?.value.trim();
+  if (!cmd) return;
+
+  const consoleEl = $("devTerminalConsole");
+  const badge = $("devTermStatusBadge");
+  const meta = $("devTermMeta");
+
+  if (badge) {
+    badge.className = "dev-term-badge busy";
+    badge.textContent = "Running…";
+  }
+
+  const timestamp = new Date().toLocaleTimeString();
+  const currentText = consoleEl ? (consoleEl.textContent.trim() === "Lamplight Terminal Ready. Enter a command above to execute inside repo." ? "" : consoleEl.textContent + "\n\n") : "";
+
+  if (consoleEl) {
+    consoleEl.textContent = currentText + `[${timestamp}] $ ${cmd}\nExecuting…`;
+    consoleEl.scrollTop = consoleEl.scrollHeight;
+  }
+
+  try {
+    const j = await api("/api/dev/run", {
+      method: "POST",
+      body: JSON.stringify({
+        command: cmd,
+        workspace_id: activeWorkspaceId
+      })
+    });
+
+    let resultOutput = "";
+    if (j.blocked) {
+      if (badge) {
+        badge.className = "dev-term-badge error";
+        badge.textContent = "Blocked";
+      }
+      resultOutput = `[GUARD SECURITY ERROR] ${j.error || "Command blocked by security rules."}`;
+    } else {
+      const isSuccess = j.exit_code === 0;
+      if (badge) {
+        badge.className = isSuccess ? "dev-term-badge" : "dev-term-badge error";
+        badge.textContent = `Exit: ${j.exit_code}`;
+      }
+      if (meta) {
+        meta.textContent = `${j.elapsed_ms || 0}ms · Working tree: ${j.repo_path || ""}`;
+      }
+
+      resultOutput = (j.stdout || "") + (j.stderr ? "\nSTDERR:\n" + j.stderr : "");
+      if (!resultOutput.trim()) resultOutput = "(Command produced no output)";
+    }
+
+    if (consoleEl) {
+      consoleEl.textContent = currentText + `[${timestamp}] $ ${cmd}\n` + resultOutput;
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+
+    // Auto refresh git status in case the command altered the repo state
+    if (cmd.startsWith("git ") || cmd.startsWith("pytest") || cmd.startsWith("python")) {
+      loadDevStatus();
+    }
+  } catch (err) {
+    if (badge) {
+      badge.className = "dev-term-badge error";
+      badge.textContent = "Error";
+    }
+    if (consoleEl) {
+      consoleEl.textContent = currentText + `[${timestamp}] $ ${cmd}\nExecution failed: ${err.message}`;
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+  }
+}
+
+async function applyDevPatch() {
+  const ta = $("devPatchText");
+  const patchText = ta?.value.trim();
+  const statusEl = $("devPatchStatusMsg");
+
+  if (!patchText) {
+    toast("Please paste unified git patch first.", true);
+    return;
+  }
+
+  const ok = await askConfirm("Apply this patch to the repository? A pre-patch backup snapshot will be saved automatically.");
+  if (!ok) return;
+
+  if (statusEl) {
+    statusEl.style.color = "var(--text-sec)";
+    statusEl.textContent = "Applying patch…";
+  }
+
+  try {
+    const j = await api("/api/dev/patch/apply", {
+      method: "POST",
+      body: JSON.stringify({
+        patch: patchText,
+        workspace_id: activeWorkspaceId
+      })
+    });
+
+    if (j.error) {
+      if (statusEl) {
+        statusEl.style.color = "#f87171";
+        statusEl.textContent = `Patch failed: ${j.error}`;
+      }
+      toast("Patch failed: " + j.error, true);
+      return;
+    }
+
+    toast(`Patch applied successfully! Backup ID: ${j.backup_id}`);
+    if (statusEl) {
+      statusEl.style.color = "#4ade80";
+      statusEl.textContent = `Success! Pre-patch backup snapshot: ${j.backup_id}`;
+    }
+    if (ta) ta.value = "";
+
+    loadDevStatus();
+    loadDevBackups();
+  } catch (err) {
+    if (statusEl) {
+      statusEl.style.color = "#f87171";
+      statusEl.textContent = `Error: ${err.message}`;
+    }
+    toast("Patch application failed: " + err.message, true);
+  }
+}
+
+async function loadDevBackups() {
+  const list = $("devPatchBackupsList");
+  if (!list) return;
+  list.innerHTML = '<div class="muted" style="padding:14px;text-align:center;font-size:0.75rem;">Loading patch snapshots…</div>';
+
+  try {
+    const j = await api("/api/backup/list").catch(() => null);
+    const snapshots = j?.backups || j?.snapshots || [];
+    list.innerHTML = "";
+
+    if (!snapshots.length) {
+      list.innerHTML = '<div class="muted" style="padding:14px;text-align:center;font-size:0.75rem;">No rollback snapshots found. Snapshots are created whenever patches are applied.</div>';
+      return;
+    }
+
+    snapshots.slice(0, 10).forEach(s => {
+      const item = document.createElement("div");
+      item.className = "dev-backup-item";
+      item.innerHTML = `
+        <div class="dev-backup-info">
+          <span class="dev-backup-id">${esc(s.filename || s.id)}</span>
+          <span class="muted" style="font-size:0.7rem;">${new Date(s.created_at).toLocaleString()}</span>
+        </div>
+        <div class="dev-backup-actions">
+          <button type="button" class="cyber-btn ghost-xs btn-rollback-patch" data-id="${esc(s.id)}">Rollback</button>
+        </div>
+      `;
+
+      item.querySelector(".btn-rollback-patch").onclick = async () => {
+        const ok = await askConfirm(`Rollback repository state using snapshot "${s.filename || s.id}"?`);
+        if (!ok) return;
+        try {
+          const r = await api("/api/dev/patch/rollback", {
+            method: "POST",
+            body: JSON.stringify({
+              backup_id: s.id,
+              workspace_id: activeWorkspaceId
+            })
+          });
+          if (r.error) {
+            toast("Rollback failed: " + r.error, true);
+          } else {
+            toast("Rollback succeeded. Repository restored.");
+            loadDevStatus();
+            loadDevBackups();
+          }
+        } catch (err) {
+          toast("Rollback error: " + err.message, true);
+        }
+      };
+
+      list.appendChild(item);
+    });
+  } catch (err) {
+    list.innerHTML = `<div class="muted" style="padding:14px;color:#f87171;font-size:0.75rem;">Failed to load snapshots: ${esc(err.message)}</div>`;
   }
 }
 

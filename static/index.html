@@ -251,6 +251,21 @@
                 <span>Multi-PDF knowledge base, flashcards &amp; quizzes</span>
               </div>
             </button>
+            <button class="workbench-menu-item" type="button" id="wbItemDevWorkbench">
+              <span class="wb-item-icon wb-icon-indigo">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="16 18 22 12 16 6"></polyline>
+                  <polyline points="8 6 2 12 8 18"></polyline>
+                </svg>
+              </span>
+              <div class="wb-item-info">
+                <div class="wb-item-title-row">
+                  <strong>Developer Workbench</strong>
+                  <span class="wb-badge wb-badge-indigo">GIT &amp; TERMINAL</span>
+                </div>
+                <span>Repository explorer, live diffs, test runner &amp; patch lab</span>
+              </div>
+            </button>
           </div>
           <div class="workbench-dropdown-divider"></div>
           <div class="workbench-dropdown-section">
@@ -1766,6 +1781,24 @@
       </div>
     </div>
 
+    <!-- Section 5: Bound Git Repository & Developer Workbench -->
+    <div class="cyber-card">
+      <div class="cyber-card-head">
+        <span class="cyber-sec-badge">05 · WORKBENCH</span>
+        <h4>Bound Git Repository &amp; Tests</h4>
+      </div>
+      <p class="muted card-desc">Inspect real-time git status, files, working diffs, and run guarded commands directly within this workspace repo.</p>
+      <div class="row-btns">
+        <button id="btnArchitectOpenDevWorkbench" type="button" class="cyber-btn primary-cyan">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="16 18 22 12 16 6"></polyline>
+            <polyline points="8 6 2 12 8 18"></polyline>
+          </svg>
+          Open Developer Workbench
+        </button>
+      </div>
+    </div>
+
     <!-- Actions -->
     <div class="cyber-action-bar">
       <button id="btnSaveArchitectStack" class="cyber-btn primary-emerald">
@@ -2584,6 +2617,181 @@
   </div>
 </div>
 
+<!-- Developer Workbench & Repository Intelligence Modal -->
+<div id="devWorkbenchModal" class="veil hidden">
+  <div class="veil-card dev-modal-card">
+    <div class="modal-head">
+      <div class="dev-modal-head-title">
+        <div class="dev-title-row">
+          <h3>Developer Workbench</h3>
+          <span id="devWorkbenchBranchBadge" class="wb-badge wb-badge-cyan">git: main</span>
+          <span id="devWorkbenchDirtyBadge" class="wb-badge wb-badge-amber hidden">● Dirty</span>
+        </div>
+        <div class="dev-repo-sub">
+          <span class="muted">Bound Repo:</span>
+          <code id="devWorkbenchRepoPath" class="dev-repo-code">/home/sumeet/ChatBots</code>
+        </div>
+      </div>
+      <div class="modal-head-actions">
+        <button id="btnRefreshDevWorkbench" class="ghost-xs" type="button" title="Refresh Git Status">🔄</button>
+        <button id="btnCloseDevWorkbenchModal" class="ghost-xs" type="button">✕</button>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="dev-tabs">
+      <button class="dev-tab active" data-tab="status" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>
+        Git &amp; Diffs
+      </button>
+      <button class="dev-tab" data-tab="tree" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        File Explorer
+      </button>
+      <button class="dev-tab" data-tab="runner" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        Terminal Runner
+      </button>
+      <button class="dev-tab" data-tab="patch" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+        Patch Lab
+      </button>
+    </div>
+
+    <!-- Tab Content Panes -->
+    <div class="dev-body">
+      <!-- Pane 1: Git Status & Diffs -->
+      <div id="devPaneStatus" class="dev-pane active">
+        <div class="dev-split-view">
+          <div class="dev-sidebar">
+            <div class="dev-commit-card" id="devHeadCommitCard">
+              <span class="muted" style="font-size:0.7rem;text-transform:uppercase;">Latest Commit</span>
+              <div id="devCommitSummary" class="dev-commit-summary">Loading commit…</div>
+            </div>
+            <div class="dev-section-title">
+              <span>Changed Files</span>
+              <span id="devChangedCount" class="dev-counter-badge">0</span>
+            </div>
+            <div id="devChangedFilesList" class="dev-file-list">
+              <!-- Dynamically populated files -->
+            </div>
+          </div>
+          <div class="dev-main-content">
+            <div class="dev-pane-header">
+              <div class="dev-diff-info">
+                <span id="devDiffFileLabel" class="dev-diff-file">Select a file to inspect diff</span>
+                <span id="devDiffStats" class="muted" style="font-size:0.75rem;"></span>
+              </div>
+              <div class="dev-diff-controls">
+                <label class="dev-check-label">
+                  <input type="checkbox" id="devDiffStagedCheck">
+                  <span>Staged diff</span>
+                </label>
+              </div>
+            </div>
+            <div class="dev-diff-viewer-wrap">
+              <pre id="devDiffOutput" class="dev-diff-viewer">No file selected.</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pane 2: File Explorer -->
+      <div id="devPaneTree" class="dev-pane">
+        <div class="dev-split-view">
+          <div class="dev-sidebar">
+            <div class="dev-tree-filter">
+              <input type="text" id="devTreeFilterInput" placeholder="Filter files by name…" class="cyber-input-field">
+            </div>
+            <div id="devTreeList" class="dev-tree-list">
+              <!-- Tree hierarchy -->
+            </div>
+          </div>
+          <div class="dev-main-content">
+            <div class="dev-pane-header">
+              <div class="dev-file-preview-info">
+                <span id="devPreviewPath" class="dev-file-path-label">Select a file to preview</span>
+                <span id="devPreviewSize" class="muted" style="font-size:0.75rem;"></span>
+              </div>
+              <div class="dev-file-actions">
+                <button type="button" id="btnDevCopyFilePath" class="cyber-btn ghost-xs">Copy Path</button>
+              </div>
+            </div>
+            <div class="dev-file-viewer-wrap">
+              <pre id="devFileContent" class="dev-file-content">Select any repository file on the left to read its code.</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pane 3: Terminal Runner -->
+      <div id="devPaneRunner" class="dev-pane">
+        <div class="dev-runner-container">
+          <div class="dev-runner-info-banner">
+            <span>Guarded Command Runner executes inside the bound workspace repository. Destructive operations are rejected automatically.</span>
+          </div>
+          <div class="dev-runner-presets">
+            <span class="muted" style="font-size:0.75rem;">Presets:</span>
+            <button type="button" class="cyber-pill dev-cmd-preset" data-cmd="git status -s">git status -s</button>
+            <button type="button" class="cyber-pill dev-cmd-preset" data-cmd="git diff --stat">git diff --stat</button>
+            <button type="button" class="cyber-pill dev-cmd-preset" data-cmd="git log -n 5 --oneline">git log</button>
+            <button type="button" class="cyber-pill dev-cmd-preset" data-cmd="python -m unittest discover tests">run tests</button>
+          </div>
+          <div class="dev-cmd-input-bar">
+            <span class="dev-cmd-prompt">$</span>
+            <input type="text" id="devCmdInput" placeholder="Enter command to run (e.g. pytest, git status, python -m unittest)..." class="dev-cmd-field">
+            <button type="button" id="btnRunDevCmd" class="cyber-btn primary-cyan">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Run
+            </button>
+          </div>
+          <div class="dev-terminal-box">
+            <div class="dev-terminal-top">
+              <span id="devTermStatusBadge" class="dev-term-badge">Ready</span>
+              <span id="devTermMeta" class="muted" style="font-size:0.72rem;"></span>
+              <button type="button" id="btnDevClearTerm" class="ghost-xs" title="Clear console">Clear</button>
+            </div>
+            <pre id="devTerminalConsole" class="dev-terminal-console">Lamplight Terminal Ready. Enter a command above to execute inside repo.</pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pane 4: Patch Lab -->
+      <div id="devPanePatch" class="dev-pane">
+        <div class="dev-patch-container">
+          <div class="dev-patch-info-banner">
+            <span>Unified Diff Patch Lab: paste unified diffs proposed by Architect or Model Lab. An automatic backup snapshot is saved before any patch is applied, allowing one-click rollback.</span>
+          </div>
+          <div class="dev-patch-input-wrap">
+            <textarea id="devPatchText" rows="7" placeholder="Paste unified git diff here (starts with 'diff --git a/... b/...' or '--- a/...')"></textarea>
+          </div>
+          <div class="dev-patch-action-bar">
+            <button type="button" id="btnApplyDevPatch" class="cyber-btn primary-emerald">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              Apply Patch (with Snapshot)
+            </button>
+            <span id="devPatchStatusMsg" class="dev-patch-status-msg"></span>
+          </div>
+          <div class="dev-backups-section">
+            <div class="dev-section-title">
+              <span>Patch Snapshots &amp; Rollback Points</span>
+            </div>
+            <div id="devPatchBackupsList" class="dev-backups-list">
+              <!-- Dynamically populated snapshots with rollback button -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Footer -->
+    <div class="modal-footer">
+      <span id="devWorkbenchFooterMsg" class="muted" style="flex:1;font-size:0.75rem;"></span>
+      <button id="btnDismissDevWorkbenchModal" class="ghost" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
 <div id="toasts"></div>
 <div id="confirmVeil" class="veil hidden">
   <div class="veil-card">
@@ -2592,6 +2800,6 @@
   </div>
 </div>
 
-<script src="/static/app.js?v=5.3"></script>
+<script src="/static/app.js?v=5.4"></script>
 </body>
 </html>

@@ -23,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, field_validator
 
 import db
+import dev_workbench
 
 OLLAMA_URL = "http://localhost:11434"
 KEEP_ALIVE = "30m"
@@ -687,6 +688,22 @@ class ContextInspectIn(BaseModel):
     exclude_turns: list[int] = []
 
 
+class DevPatchApplyIn(BaseModel):
+    workspace_id: str | None = None
+    patch: str
+
+
+class DevPatchRollbackIn(BaseModel):
+    workspace_id: str | None = None
+    backup_id: str
+
+
+class DevCommandRunIn(BaseModel):
+    workspace_id: str | None = None
+    command: str
+    timeout: int = 15
+
+
 class SessionRenameIn(BaseModel):
     title: str
 
@@ -1186,7 +1203,7 @@ def _nsfw_system() -> str | None:
 
 
 
-def _architect_system(user_msg: str = "") -> str:
+def _architect_system(user_msg: str = "", workspace_id: str | None = None) -> str:
     base = _base_prompt("architect")
     stack_rules = (db.get_setting("architect_stack") or "").strip()
     sections = [
@@ -1195,6 +1212,16 @@ def _architect_system(user_msg: str = "") -> str:
     ]
     if base:
         sections.append(f"### Core Directive & Philosophy\n{base}")
+
+    # Inject live local repository context if available
+    try:
+        repo_dir = dev_workbench.resolve_repo_path(workspace_id)
+        if repo_dir:
+            repo_summary = dev_workbench.get_architect_repo_summary(repo_dir)
+            if repo_summary:
+                sections.append(f"### Bound Local Repository (LIVE CONTEXT)\n{repo_summary}")
+    except Exception:
+        pass
 
     sections.append(
         "### Engineering Standards & Execution Rules\n"
@@ -1467,7 +1494,7 @@ def _build_messages(mode: str, user_msg: str | None, session_id: str | None = No
         if sys:
             sys_blocks.append(sys)
     elif mode == "architect":
-        sys = _architect_system(user_msg=user_msg or "")
+        sys = _architect_system(user_msg=user_msg or "", workspace_id=eff_ws_id)
         if sys:
             sys_blocks.append(sys)
     elif mode == "muse":
@@ -4492,7 +4519,7 @@ def context_inspect(body: ContextInspectIn, x_passcode: str | None = Header(defa
     elif mode == "nsfw":
         persona_text = _nsfw_system()
     elif mode == "architect":
-        persona_text = _architect_system(clean_msg)
+        persona_text = _architect_system(clean_msg, workspace_id=eff_ws_id)
     elif mode == "muse":
         persona_text = _muse_system(clean_msg)
 
@@ -4586,6 +4613,100 @@ def backup_download(snap_id: str, x_passcode: str | None = Header(default=None))
         filename=snap["filename"],
         media_type="application/x-sqlite3"
     )
+
+
+# ==============================================================================
+# Phase 2: Developer Workbench & Local Repository Intelligence API
+# ==============================================================================
+
+@app.get("/api/dev/status")
+def dev_status(workspace_id: str | None = None, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    repo = dev_workbench.resolve_repo_path(workspace_id)
+    if not repo:
+        return {
+            "ok": False,
+            "error": "No repository configured or detected for this workspace."
+        }
+    status = dev_workbench.get_git_status(repo)
+    return {"ok": True, "repo_path": str(repo), "status": status}
+
+
+@app.get("/api/dev/diff")
+def dev_diff(workspace_id: str | None = None, filepath: str | None = None,
+             staged: bool = False, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    repo = dev_workbench.resolve_repo_path(workspace_id)
+    if not repo:
+        raise HTTPException(400, "No repository configured or detected.")
+    diff_text = dev_workbench.get_git_diff(repo, filepath=filepath, staged=staged)
+    return {"ok": True, "diff": diff_text}
+
+
+@app.get("/api/dev/tree")
+def dev_tree(workspace_id: str | None = None, subpath: str = "",
+             x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    repo = dev_workbench.resolve_repo_path(workspace_id)
+    if not repo:
+        raise HTTPException(400, "No repository configured or detected.")
+    tree = dev_workbench.get_file_tree(repo, subpath=subpath)
+    return {"ok": True, "tree": tree, "repo_name": repo.name, "repo_path": str(repo)}
+
+
+@app.get("/api/dev/file")
+def dev_file(path: str, workspace_id: str | None = None,
+             x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    repo = dev_workbench.resolve_repo_path(workspace_id)
+    if not repo:
+        raise HTTPException(400, "No repository configured or detected.")
+    file_info = dev_workbench.read_repo_file(repo, path)
+    if "error" in file_info:
+        raise HTTPException(400, file_info["error"])
+    return {"ok": True, "file": file_info}
+
+
+@app.post("/api/dev/patch/apply")
+def dev_patch_apply(body: DevPatchApplyIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    repo = dev_workbench.resolve_repo_path(body.workspace_id)
+    if not repo:
+        raise HTTPException(400, "No repository configured or detected.")
+    res = dev_workbench.apply_patch(repo, body.patch)
+    if not res.get("success"):
+        raise HTTPException(400, res.get("error", "Failed to apply patch."))
+    return {"ok": True, "result": res}
+
+
+@app.post("/api/dev/patch/rollback")
+def dev_patch_rollback(body: DevPatchRollbackIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    repo = dev_workbench.resolve_repo_path(body.workspace_id)
+    if not repo:
+        raise HTTPException(400, "No repository configured or detected.")
+    res = dev_workbench.rollback_patch(repo, body.backup_id)
+    if not res.get("success"):
+        raise HTTPException(400, res.get("error", "Rollback failed."))
+    return {"ok": True, "result": res}
+
+
+@app.post("/api/dev/run")
+def dev_command_run(body: DevCommandRunIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    repo = dev_workbench.resolve_repo_path(body.workspace_id)
+    if not repo:
+        raise HTTPException(400, "No repository configured or detected.")
+    res = dev_workbench.execute_guarded_command(repo, body.command, body.timeout)
+    return {"ok": True, "execution": res}
+
 
 
 
