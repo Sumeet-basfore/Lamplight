@@ -71,9 +71,93 @@ def init():
             c.execute("ALTER TABLE sessions ADD COLUMN context_summary TEXT DEFAULT ''")
         except sqlite3.OperationalError:
             pass
+        try:
+            c.execute("ALTER TABLE sessions ADD COLUMN workspace_id TEXT DEFAULT 'ws_default'")
+        except sqlite3.OperationalError:
+            pass
         c.execute(
             "CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, id)"
         )
+        c.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sessions_workspace ON sessions(workspace_id, updated_at)"
+        )
+
+        # ---------------------------------------------------------
+        # Project Workspaces
+        # ---------------------------------------------------------
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS workspaces(
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                slug TEXT UNIQUE NOT NULL,
+                description TEXT DEFAULT '',
+                instructions TEXT DEFAULT '',
+                icon TEXT DEFAULT '📁',
+                color TEXT DEFAULT '#38bdf8',
+                repo_path TEXT DEFAULT '',
+                model_pref TEXT DEFAULT '',
+                is_default INTEGER DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"""
+        )
+        c.execute("CREATE INDEX IF NOT EXISTS idx_workspaces_slug ON workspaces(slug)")
+
+        # Seed default workspace if empty
+        ws_count = c.execute("SELECT COUNT(*) AS n FROM workspaces").fetchone()["n"]
+        if ws_count == 0:
+            c.execute(
+                """INSERT INTO workspaces(id, name, slug, description, instructions, icon, color, is_default)
+                   VALUES('ws_default', 'Personal Sandbox', 'default',
+                          'General personal AI workspace for open conversation, learning, and experiments',
+                          'Act as a proactive, capable companion across tasks. Maintain intellectual honesty, clean structure, and sharp clarity.',
+                          '📁', '#38bdf8', 1)"""
+            )
+
+        # ---------------------------------------------------------
+        # Unified Memory Control Center (Global & Workspace Scoped)
+        # ---------------------------------------------------------
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS memories(
+                id TEXT PRIMARY KEY,
+                workspace_id TEXT,
+                scope TEXT NOT NULL DEFAULT 'global', -- 'global', 'workspace'
+                category TEXT DEFAULT 'fact', -- 'fact', 'preference', 'instruction', 'project'
+                content TEXT NOT NULL,
+                source_session_id TEXT,
+                source_message_id INTEGER,
+                confidence REAL DEFAULT 1.0,
+                is_active INTEGER DEFAULT 1,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"""
+        )
+        c.execute("CREATE INDEX IF NOT EXISTS idx_memories_workspace ON memories(workspace_id, is_active)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope, is_active)")
+
+        # Auto-migrate legacy friend_facts into global memories if memories is empty
+        mem_count = c.execute("SELECT COUNT(*) AS n FROM memories").fetchone()["n"]
+        if mem_count == 0:
+            facts = c.execute("SELECT * FROM friend_facts").fetchall()
+            for f in facts:
+                mem_id = f"mem_{uuid.uuid4().hex[:10]}"
+                c.execute(
+                    """INSERT OR IGNORE INTO memories(id, workspace_id, scope, category, content, confidence, is_active, created_at)
+                       VALUES(?, NULL, 'global', 'fact', ?, 1.0, 1, ?)""",
+                    (mem_id, f["fact"], f["created_at"])
+                )
+
+        # ---------------------------------------------------------
+        # Database Backup Snapshots Log
+        # ---------------------------------------------------------
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS backup_snapshots(
+                id TEXT PRIMARY KEY,
+                filename TEXT NOT NULL,
+                filepath TEXT NOT NULL,
+                file_size INTEGER NOT NULL,
+                trigger_type TEXT DEFAULT 'auto',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"""
+        )
+        c.execute("CREATE INDEX IF NOT EXISTS idx_backups_created ON backup_snapshots(created_at DESC)")
 
         c.execute(
             """CREATE TABLE IF NOT EXISTS skills(
@@ -393,18 +477,30 @@ def set_setting(key: str, value: str) -> None:
         )
 
 
-def list_sessions(mode: str) -> list[dict]:
+def list_sessions(mode: str, workspace_id: str | None = None) -> list[dict]:
     with conn() as c:
-        rows = c.execute(
-            """SELECT s.id, s.mode, s.title, s.created_at, s.updated_at,
-                      COUNT(m.id) AS msg_count
-               FROM sessions s
-               LEFT JOIN messages m ON s.id = m.session_id
-               WHERE s.mode=?
-               GROUP BY s.id
-               ORDER BY s.updated_at DESC, s.created_at DESC""",
-            (mode,)
-        ).fetchall()
+        if workspace_id:
+            rows = c.execute(
+                """SELECT s.id, s.mode, s.title, s.workspace_id, s.created_at, s.updated_at,
+                          COUNT(m.id) AS msg_count
+                   FROM sessions s
+                   LEFT JOIN messages m ON s.id = m.session_id
+                   WHERE s.mode=? AND (s.workspace_id=? OR s.workspace_id IS NULL OR s.workspace_id='')
+                   GROUP BY s.id
+                   ORDER BY s.updated_at DESC, s.created_at DESC""",
+                (mode, workspace_id)
+            ).fetchall()
+        else:
+            rows = c.execute(
+                """SELECT s.id, s.mode, s.title, s.workspace_id, s.created_at, s.updated_at,
+                          COUNT(m.id) AS msg_count
+                   FROM sessions s
+                   LEFT JOIN messages m ON s.id = m.session_id
+                   WHERE s.mode=?
+                   GROUP BY s.id
+                   ORDER BY s.updated_at DESC, s.created_at DESC""",
+                (mode,)
+            ).fetchall()
         return [dict(r) for r in rows]
 
 
@@ -414,25 +510,31 @@ def get_session(session_id: str) -> dict | None:
         return dict(r) if r else None
 
 
-def create_session(mode: str, title: str = "New Chat", session_id: str | None = None) -> str:
+def create_session(mode: str, title: str = "New Chat", session_id: str | None = None, workspace_id: str = "ws_default") -> str:
     sid = session_id or f"s_{uuid.uuid4().hex[:12]}"
     with conn() as c:
         c.execute(
-            "INSERT INTO sessions(id, mode, title, updated_at) VALUES(?, ?, ?, CURRENT_TIMESTAMP)",
-            (sid, mode, title)
+            "INSERT INTO sessions(id, mode, title, workspace_id, updated_at) VALUES(?, ?, ?, ?, CURRENT_TIMESTAMP)",
+            (sid, mode, title, workspace_id)
         )
     return sid
 
 
-def get_or_create_latest_session(mode: str) -> str:
+def get_or_create_latest_session(mode: str, workspace_id: str | None = None) -> str:
     with conn() as c:
-        r = c.execute(
-            "SELECT id FROM sessions WHERE mode=? ORDER BY updated_at DESC LIMIT 1",
-            (mode,)
-        ).fetchone()
+        if workspace_id:
+            r = c.execute(
+                "SELECT id FROM sessions WHERE mode=? AND (workspace_id=? OR workspace_id IS NULL OR workspace_id='') ORDER BY updated_at DESC LIMIT 1",
+                (mode, workspace_id)
+            ).fetchone()
+        else:
+            r = c.execute(
+                "SELECT id FROM sessions WHERE mode=? ORDER BY updated_at DESC LIMIT 1",
+                (mode,)
+            ).fetchone()
         if r:
             return r["id"]
-    return create_session(mode, "New Chat")
+    return create_session(mode, "New Chat", workspace_id=workspace_id or "ws_default")
 
 
 def rename_session(session_id: str, title: str) -> None:
@@ -1110,6 +1212,292 @@ def toggle_prompt_favorite(template_id: str) -> bool:
         new_fav = 0 if row["is_favorite"] else 1
         c.execute("UPDATE prompt_templates SET is_favorite=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (new_fav, template_id))
         return bool(new_fav)
+
+
+# ==============================================================================
+# Project Workspaces CRUD
+# ==============================================================================
+
+def list_workspaces() -> list[dict]:
+    with conn() as c:
+        rows = c.execute(
+            """SELECT w.*,
+                      (SELECT COUNT(*) FROM sessions s WHERE s.workspace_id = w.id) AS session_count,
+                      (SELECT COUNT(*) FROM memories m WHERE m.workspace_id = w.id AND m.is_active = 1) AS memory_count
+               FROM workspaces w
+               ORDER BY w.is_default DESC, w.updated_at DESC"""
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_workspace(ws_id: str) -> dict | None:
+    with conn() as c:
+        row = c.execute("SELECT * FROM workspaces WHERE id=?", (ws_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def get_workspace_by_slug(slug: str) -> dict | None:
+    with conn() as c:
+        row = c.execute("SELECT * FROM workspaces WHERE slug=?", (slug,)).fetchone()
+        return dict(row) if row else None
+
+
+def create_workspace(name: str, slug: str | None = None, description: str = "",
+                     instructions: str = "", icon: str = "📁", color: str = "#38bdf8",
+                     repo_path: str = "", model_pref: str = "") -> dict:
+    ws_id = f"ws_{uuid.uuid4().hex[:10]}"
+    final_slug = slug or re.sub(r'[^a-z0-9_-]', '', name.lower().replace(' ', '-')) or ws_id
+    with conn() as c:
+        # Check uniqueness of slug
+        existing = c.execute("SELECT id FROM workspaces WHERE slug=?", (final_slug,)).fetchone()
+        if existing:
+            final_slug = f"{final_slug}-{uuid.uuid4().hex[:4]}"
+        c.execute(
+            """INSERT INTO workspaces(id, name, slug, description, instructions, icon, color, repo_path, model_pref)
+               VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (ws_id, name.strip(), final_slug, description.strip(), instructions.strip(), icon, color, repo_path.strip(), model_pref.strip())
+        )
+    return get_workspace(ws_id)
+
+
+def update_workspace(ws_id: str, name: str | None = None, description: str | None = None,
+                     instructions: str | None = None, icon: str | None = None, color: str | None = None,
+                     repo_path: str | None = None, model_pref: str | None = None) -> dict | None:
+    fields = []
+    values = []
+    if name is not None:
+        fields.append("name = ?")
+        values.append(name.strip())
+    if description is not None:
+        fields.append("description = ?")
+        values.append(description.strip())
+    if instructions is not None:
+        fields.append("instructions = ?")
+        values.append(instructions.strip())
+    if icon is not None:
+        fields.append("icon = ?")
+        values.append(icon.strip())
+    if color is not None:
+        fields.append("color = ?")
+        values.append(color.strip())
+    if repo_path is not None:
+        fields.append("repo_path = ?")
+        values.append(repo_path.strip())
+    if model_pref is not None:
+        fields.append("model_pref = ?")
+        values.append(model_pref.strip())
+
+    if not fields:
+        return get_workspace(ws_id)
+
+    fields.append("updated_at = CURRENT_TIMESTAMP")
+    values.append(ws_id)
+
+    with conn() as c:
+        c.execute(f"UPDATE workspaces SET {', '.join(fields)} WHERE id = ?", tuple(values))
+    return get_workspace(ws_id)
+
+
+def delete_workspace(ws_id: str) -> bool:
+    if ws_id == "ws_default":
+        return False  # Cannot delete default workspace
+    with conn() as c:
+        # Reassign sessions to default workspace to preserve history
+        c.execute("UPDATE sessions SET workspace_id = 'ws_default' WHERE workspace_id = ?", (ws_id,))
+        # Move memories to default or delete workspace-specific ones
+        c.execute("DELETE FROM memories WHERE workspace_id = ?", (ws_id,))
+        c.execute("DELETE FROM workspaces WHERE id = ?", (ws_id,))
+        return True
+
+
+# ==============================================================================
+# Unified Memory Control Center CRUD
+# ==============================================================================
+
+def list_memories(workspace_id: str | None = None, scope: str | None = None,
+                  category: str | None = None, search: str | None = None,
+                  active_only: bool = False) -> list[dict]:
+    with conn() as c:
+        query = "SELECT m.*, w.name AS workspace_name FROM memories m LEFT JOIN workspaces w ON m.workspace_id = w.id WHERE 1=1"
+        params = []
+        if active_only:
+            query += " AND m.is_active = 1"
+        if scope:
+            query += " AND m.scope = ?"
+            params.append(scope)
+        if workspace_id:
+            query += " AND (m.workspace_id = ? OR m.scope = 'global')"
+            params.append(workspace_id)
+        if category:
+            query += " AND m.category = ?"
+            params.append(category)
+        if search:
+            query += " AND m.content LIKE ?"
+            params.append(f"%{search.strip()}%")
+        query += " ORDER BY m.scope DESC, m.updated_at DESC"
+        rows = c.execute(query, params).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_memory(memory_id: str) -> dict | None:
+    with conn() as c:
+        row = c.execute("SELECT * FROM memories WHERE id=?", (memory_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def create_memory(content: str, workspace_id: str | None = None, scope: str = "global",
+                  category: str = "fact", source_session_id: str | None = None,
+                  source_message_id: int | None = None, confidence: float = 1.0) -> dict:
+    mem_id = f"mem_{uuid.uuid4().hex[:10]}"
+    final_scope = "workspace" if (workspace_id and scope == "workspace") else "global"
+    target_ws = workspace_id if final_scope == "workspace" else None
+    with conn() as c:
+        c.execute(
+            """INSERT INTO memories(id, workspace_id, scope, category, content, source_session_id, source_message_id, confidence, is_active)
+               VALUES(?, ?, ?, ?, ?, ?, ?, ?, 1)""",
+            (mem_id, target_ws, final_scope, category, content.strip(), source_session_id, source_message_id, confidence)
+        )
+    return get_memory(mem_id)
+
+
+def update_memory(memory_id: str, content: str | None = None, category: str | None = None,
+                  is_active: int | None = None, scope: str | None = None,
+                  workspace_id: str | None = None) -> dict | None:
+    fields = []
+    values = []
+    if content is not None:
+        fields.append("content = ?")
+        values.append(content.strip())
+    if category is not None:
+        fields.append("category = ?")
+        values.append(category.strip())
+    if is_active is not None:
+        fields.append("is_active = ?")
+        values.append(int(is_active))
+    if scope is not None:
+        fields.append("scope = ?")
+        values.append(scope)
+    if workspace_id is not None:
+        fields.append("workspace_id = ?")
+        values.append(workspace_id if workspace_id != "" else None)
+
+    if not fields:
+        return get_memory(memory_id)
+
+    fields.append("updated_at = CURRENT_TIMESTAMP")
+    values.append(memory_id)
+
+    with conn() as c:
+        c.execute(f"UPDATE memories SET {', '.join(fields)} WHERE id = ?", tuple(values))
+    return get_memory(memory_id)
+
+
+def delete_memory(memory_id: str) -> bool:
+    with conn() as c:
+        c.execute("DELETE FROM memories WHERE id=?", (memory_id,))
+        return True
+
+
+def get_relevant_memories_for_context(workspace_id: str | None = None, limit: int = 25) -> list[dict]:
+    with conn() as c:
+        if workspace_id and workspace_id != "ws_default":
+            rows = c.execute(
+                """SELECT id, scope, category, content, workspace_id
+                   FROM memories
+                   WHERE is_active = 1 AND (scope = 'global' OR workspace_id = ?)
+                   ORDER BY scope DESC, updated_at DESC LIMIT ?""",
+                (workspace_id, limit)
+            ).fetchall()
+        else:
+            rows = c.execute(
+                """SELECT id, scope, category, content, workspace_id
+                   FROM memories
+                   WHERE is_active = 1 AND (scope = 'global' OR workspace_id = 'ws_default')
+                   ORDER BY scope DESC, updated_at DESC LIMIT ?""",
+                (limit,)
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+
+# ==============================================================================
+# Database Backup Snapshots Engine
+# ==============================================================================
+
+def ensure_backups_dir() -> Path:
+    bdir = Path(__file__).parent / "backups"
+    bdir.mkdir(exist_ok=True)
+    return bdir
+
+
+def create_backup_snapshot(trigger_type: str = "manual") -> dict | None:
+    import datetime
+    bdir = ensure_backups_dir()
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    snap_id = f"snap_{uuid.uuid4().hex[:8]}"
+    filename = f"chatbots_backup_{ts}.db"
+    dest_path = bdir / filename
+
+    try:
+        with conn() as c:
+            # Atomic SQLite online vacuum into destination file
+            c.execute(f"VACUUM INTO '{dest_path.as_posix()}'")
+            size = dest_path.stat().st_size
+            c.execute(
+                "INSERT INTO backup_snapshots(id, filename, filepath, file_size, trigger_type) VALUES(?, ?, ?, ?, ?)",
+                (snap_id, filename, dest_path.as_posix(), size, trigger_type)
+            )
+            # Prune older backups if exceeding 10
+            rows = c.execute("SELECT id, filepath FROM backup_snapshots ORDER BY created_at DESC").fetchall()
+            if len(rows) > 10:
+                for old in rows[10:]:
+                    try:
+                        p = Path(old["filepath"])
+                        if p.exists():
+                            p.unlink()
+                    except Exception:
+                        pass
+                    c.execute("DELETE FROM backup_snapshots WHERE id=?", (old["id"],))
+
+        return {
+            "id": snap_id,
+            "filename": filename,
+            "filepath": dest_path.as_posix(),
+            "file_size": size,
+            "trigger_type": trigger_type
+        }
+    except Exception as e:
+        print(f"[Backup] Failed to create backup snapshot: {e}")
+        return None
+
+
+def list_backup_snapshots(limit: int = 20) -> list[dict]:
+    with conn() as c:
+        rows = c.execute(
+            "SELECT * FROM backup_snapshots ORDER BY created_at DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_backup_snapshot(snapshot_id: str) -> dict | None:
+    with conn() as c:
+        row = c.execute("SELECT * FROM backup_snapshots WHERE id=?", (snapshot_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def delete_backup_snapshot(snapshot_id: str) -> bool:
+    with conn() as c:
+        row = c.execute("SELECT filepath FROM backup_snapshots WHERE id=?", (snapshot_id,)).fetchone()
+        if row:
+            try:
+                p = Path(row["filepath"])
+                if p.exists():
+                    p.unlink()
+            except Exception:
+                pass
+            c.execute("DELETE FROM backup_snapshots WHERE id=?", (snapshot_id,))
+            return True
+        return False
+
 
 
 

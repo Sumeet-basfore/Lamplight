@@ -1,9 +1,12 @@
 # runtime data
 chatbots.db
 chatbots.db-*
+backups/
+exports/
 uploads/
 tts_cache/
 tts_models/
+plan.md
 
 # python
 __pycache__/

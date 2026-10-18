@@ -4,6 +4,8 @@ let activeSessions = {
   nsfw: localStorage.getItem("lamplight_session_nsfw") || null,
   friend: localStorage.getItem("lamplight_session_friend") || null
 };
+let activeWorkspaceId = localStorage.getItem("lamplight_workspace") || "ws_default";
+let allCachedWorkspaces = [];
 let stagedAttachments = [];
 let mediaRecorder = null, audioChunks = [], recTimerInterval = null, recStartTime = 0;
 let allSkills = [], activeSkill = null, slashSelectedIndex = -1, filteredSkills = [];
@@ -122,25 +124,33 @@ function extractSocraticQuestions(text) {
 }
 
 function parseCallouts(text) {
-  return text.replace(/(?:^|<br>)\s*&gt;[ \t]*\[!(NOTE|TIP|WARNING|IMPORTANT|CAUTION|LORE|PLOT TWIST|ARCHITECT)\][ \t]*(?:<br>)?([\s\S]*?)(?=(?:<br>\s*<br>)|$)/gi, (match, type, content) => {
+  const icons = {
+    "NOTE": "ℹ️",
+    "TIP": "💡",
+    "WARNING": "⚠️",
+    "IMPORTANT": "❗",
+    "CAUTION": "🛑",
+    "LORE": "📖",
+    "PLOT TWIST": "⚡",
+    "ARCHITECT": "📐"
+  };
+  // 1. Blockquote HTML from marked
+  text = text.replace(/<blockquote>\s*<p>\[!(NOTE|TIP|WARNING|IMPORTANT|CAUTION|LORE|PLOT TWIST|ARCHITECT)\]\s*(?:<br>)?([\s\S]*?)<\/p>\s*<\/blockquote>/gi, (_, type, content) => {
     const t = type.toUpperCase();
-    const icons = {
-      "NOTE": "ℹ️",
-      "TIP": "💡",
-      "WARNING": "⚠️",
-      "IMPORTANT": "❗",
-      "CAUTION": "🛑",
-      "LORE": "📖",
-      "PLOT TWIST": "⚡",
-      "ARCHITECT": "📐"
-    };
     const icon = icons[t] || "📌";
-    const cleanContent = content.split(/<br>/i).map(l => l.replace(/^&gt;\s?/, "")).join("<br>");
+    return `<div class="glass-callout callout-${t.toLowerCase().replace(/\s+/g, '-')}"><div class="callout-header"><span class="callout-icon">${icon}</span> <strong class="callout-title">${t}</strong></div><div class="callout-body">${content}</div></div>`;
+  });
+  // 2. Raw line fallback
+  return text.replace(/(?:^|<br>)\s*(?:&gt;|>)[ \t]*\[!(NOTE|TIP|WARNING|IMPORTANT|CAUTION|LORE|PLOT TWIST|ARCHITECT)\][ \t]*(?:<br>)?([\s\S]*?)(?=(?:<br>\s*<br>)|$)/gi, (match, type, content) => {
+    const t = type.toUpperCase();
+    const icon = icons[t] || "📌";
+    const cleanContent = content.split(/<br>/i).map(l => l.replace(/^(?:&gt;|>)\s?/, "")).join("<br>");
     return `<div class="glass-callout callout-${t.toLowerCase().replace(/\s+/g, '-')}"><div class="callout-header"><span class="callout-icon">${icon}</span> <strong class="callout-title">${t}</strong></div><div class="callout-body">${cleanContent}</div></div>`;
   });
 }
 
 function parseSceneBreaks(text) {
+  text = text.replace(/<hr\s*\/?>/gi, '<div class="scene-break-divider"><span class="sb-line"></span><span class="sb-glyph">✦ ✦ ✦</span><span class="sb-line"></span></div>');
   return text.replace(/(?:^|<br>)\s*[-*_]{3,}\s*(?:<br>|$)/g, '<div class="scene-break-divider"><span class="sb-line"></span><span class="sb-glyph">✦ ✦ ✦</span><span class="sb-line"></span></div>');
 }
 
@@ -230,11 +240,12 @@ function md(src) {
   src = cleanText;
 
   const blocks = [];
-  let h = esc(src).replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+  // 1. Isolate and preserve code blocks and mermaid diagrams before markdown processing
+  let textToParse = src.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
     const l = (lang || "").trim().toLowerCase();
     if (l === "mermaid") {
       const codeClean = unesc(code.trim());
-      return `\u0000${blocks.push(`
+      return `\n\n%%MERMAID_BLOCK_${blocks.push(`
         <div class="mermaid-chat-card">
           <div class="code-header">
             <span class="code-lang"><span class="lang-dot mmd-dot"></span> ARCHITECTURE DIAGRAM</span>
@@ -247,12 +258,12 @@ function md(src) {
             <div class="mermaid">${esc(codeClean)}</div>
           </div>
         </div>
-      `) - 1}\u0000`;
+      `) - 1}%%\n\n`;
     }
 
     const langDisplay = l || "code";
     const highlighted = highlightSyntax(unesc(code), langDisplay);
-    return `\u0000${blocks.push(`
+    return `\n\n%%CODE_BLOCK_${blocks.push(`
       <div class="code-wrap">
         <div class="code-header">
           <span class="code-lang"><span class="lang-dot"></span> ${esc(langDisplay.toUpperCase())}</span>
@@ -263,14 +274,44 @@ function md(src) {
         </div>
         <pre><code data-lang="${esc(langDisplay)}">${highlighted}</code></pre>
       </div>
-    `) - 1}\u0000`;
+    `) - 1}%%\n\n`;
   });
 
-  // Inline formatting
-  h = h.replace(/`([^`\n]+)`/g, "<code>$1</code>")
-       .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
-       .replace(/(^|\W)\*([^*\n]+)\*/g, "$1<i>$2</i>")
-       .replace(/\n/g, "<br>");
+  let h = "";
+  if (typeof marked !== "undefined" && marked.parse) {
+    marked.setOptions({
+      gfm: true,
+      breaks: true
+    });
+    h = marked.parse(textToParse);
+    // Unwrap paragraphs around code blocks and mermaid diagrams
+    h = h.replace(/<p>\s*%%(CODE|MERMAID)_BLOCK_(\d+)%%\s*<\/p>/g, (_, __, i) => blocks[+i]);
+    h = h.replace(/%%(CODE|MERMAID)_BLOCK_(\d+)%%/g, (_, __, i) => blocks[+i]);
+  } else {
+    // Robust built-in markdown fallback parser
+    let raw = esc(textToParse);
+    // Headings
+    raw = raw.replace(/^######\s+(.+)$/gm, "<h6>$1</h6>")
+             .replace(/^#####\s+(.+)$/gm, "<h5>$1</h5>")
+             .replace(/^####\s+(.+)$/gm, "<h4>$1</h4>")
+             .replace(/^###\s+(.+)$/gm, "<h3>$1</h3>")
+             .replace(/^##\s+(.+)$/gm, "<h2>$1</h2>")
+             .replace(/^#\s+(.+)$/gm, "<h1>$1</h1>");
+
+    // Unordered lists
+    raw = raw.replace(/^(?:[*+-]\s+)(.+)$/gm, "<li>$1</li>");
+    raw = raw.replace(/(<li>[\s\S]*?<\/li>)/g, "<ul>$1</ul>");
+    raw = raw.replace(/<\/ul>\s*<ul>/g, "");
+
+    // Inline formatting
+    raw = raw.replace(/`([^`\n]+)`/g, "<code>$1</code>")
+             .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+             .replace(/(^|\W)\*([^*\n]+)\*/g, "$1<i>$2</i>")
+             .replace(/\n/g, "<br>");
+
+    // Restore blocks
+    h = raw.replace(/%%(CODE|MERMAID)_BLOCK_(\d+)%%/g, (_, __, i) => blocks[+i]);
+  }
 
   // Callouts & scene breaks
   h = parseCallouts(h);
@@ -284,6 +325,32 @@ function md(src) {
     return `<span class="doc-citation-pill" data-page="${pageNum}" onclick="handleCitationClick(this)">📄 Page ${pageNum}</span>`;
   });
 
+  // Generated document downloads & cyber-file-cards
+  h = h.replace(/\[([^\]]+)\]\(((\/exports\/[^\s)]+))\)/g, (_, label, url) => {
+    const filename = url.split("/").pop();
+    const ext = filename.split(".").pop().toLowerCase();
+    const icon = ext === "pdf" ? "📕" : ext === "docx" ? "📘" : ext === "md" ? "📝" : "📄";
+    return `<div class="cyber-file-card" data-url="${esc(url)}">
+      <div class="cfc-icon">${icon}</div>
+      <div class="cfc-info">
+        <div class="cfc-name">${esc(label || filename)}</div>
+        <div class="cfc-meta">${esc(ext.toUpperCase())} File · Ready to download</div>
+      </div>
+      <div class="cfc-actions">
+        <a href="${esc(url)}" download="${esc(filename)}" class="cfc-btn primary" title="Download file">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span>Download</span>
+        </a>
+        <button type="button" class="cfc-btn ghost cfc-preview-btn" onclick="previewExportDoc('${esc(url)}')" title="Preview">
+          <span>Canvas</span>
+        </button>
+      </div>
+    </div>`;
+  });
+
+  // Regular markdown links
+  h = h.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" class="chat-link">$1</a>');
+
   // Append Socratic choice pills if found
   if (questions && questions.length > 0) {
     const pillsHtml = `
@@ -294,8 +361,7 @@ function md(src) {
     h += pillsHtml;
   }
 
-  let finalHtml = h.replace(/\u0000(\d+)\u0000/g, (_, i) => blocks[+i]);
-
+  // Prepend Thinking HUD Accordion if present
   if (historicalThinking) {
     const tokenEst = Math.round(historicalThinking.split(/\s+/).filter(Boolean).length * 1.25);
     const hudHtml = `
@@ -312,10 +378,10 @@ function md(src) {
         <div class="thinking-hud-body">${esc(historicalThinking)}</div>
       </details>
     `;
-    finalHtml = hudHtml + finalHtml;
+    h = hudHtml + h;
   }
 
-  return finalHtml;
+  return h;
 }
 
 // Global listener to update EXPAND/COLLAPSE label on any thinking accordion toggle
@@ -494,6 +560,41 @@ window.openSnippetInCanvas = function(btn) {
   toggleCanvas(true);
 };
 
+window.previewExportDoc = async function(url) {
+  if (typeof labOn !== "undefined" && labOn) {
+    setMainView("chat");
+  }
+  const filename = url.split("/").pop();
+  const ext = filename.split(".").pop().toLowerCase();
+  if (ext === "md") {
+    try {
+      const r = await fetch(url);
+      const text = await r.text();
+      canvasState.code = text;
+      canvasState.lang = "markdown";
+      canvasState.title = filename;
+      canvasState.tab = "preview";
+      toggleCanvas(true);
+    } catch(e) {
+      toast("Failed to load preview", true);
+    }
+  } else if (ext === "pdf") {
+    canvasState.code = `<iframe src="${url}" style="width:100%; height:100%; border:none;"></iframe>`;
+    canvasState.lang = "html";
+    canvasState.title = filename;
+    canvasState.tab = "preview";
+    toggleCanvas(true);
+  } else {
+    toast("Word documents are downloaded directly.");
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+};
+
 /* ---------- lock screen & boot ---------- */
 function wireLockScreen() {
   const codeInput = $("unlockCode");
@@ -627,24 +728,160 @@ async function boot() {
   wireLockScreen();
   const g = await api("/api/gate").catch(() => null);
   if (!g) { toast("Server unreachable — is the service running?", true); return; }
-  if (g.need18) $("gate").classList.remove("hidden");
-  else if (g.hasPasscode && !passcode) {
+  if (g.hasPasscode && !passcode) {
     $("lock").classList.remove("hidden");
     setTimeout(() => $("unlockCode")?.focus(), 100);
   }
   else showApp();
 }
-$("btn18").onclick = async () => { await api("/api/confirm-18", { method: "POST" }); $("gate").classList.add("hidden"); boot(); };
+if ($("btn18")) {
+  $("btn18").onclick = async () => { await api("/api/confirm-18", { method: "POST" }); $("gate")?.classList.add("hidden"); boot(); };
+}
+let isWebSearchActive = false;
+
+function wireWebSearch() {
+  const btn = $("btnWebSearch");
+  if (!btn) return;
+  btn.onclick = () => {
+    isWebSearchActive = !isWebSearchActive;
+    btn.classList.toggle("active", isWebSearchActive);
+    btn.setAttribute("aria-pressed", isWebSearchActive ? "true" : "false");
+    btn.title = isWebSearchActive 
+      ? "Real-Time Web Search: ACTIVE (Click to disable)" 
+      : "Toggle Real-Time Web Search (Treg)";
+    toast(isWebSearchActive ? "🌐 Real-Time Web Search: ACTIVE" : "Web Search: Disabled");
+  };
+}
+
+function wireTreg() {
+  const btnSave = $("btnSaveTreg");
+  const btnTest = $("btnTestTreg");
+  const btnToggleToken = $("btnToggleTregToken");
+  const tokenInput = $("tregTokenInput");
+
+  if (btnToggleToken && tokenInput) {
+    btnToggleToken.onclick = () => {
+      if (tokenInput.type === "password") {
+        tokenInput.type = "text";
+        btnToggleToken.textContent = "🙈";
+      } else {
+        tokenInput.type = "password";
+        btnToggleToken.textContent = "👁";
+      }
+    };
+  }
+
+  if (btnSave) {
+    btnSave.onclick = async () => {
+      const route = $("tregRouteSelect") ? $("tregRouteSelect").value : "treg.web.search";
+      const token = $("tregTokenInput") ? $("tregTokenInput").value.trim() : "";
+      try {
+        await api("/api/treg/config", {
+          method: "POST",
+          body: JSON.stringify({ route, token })
+        });
+        toast("Treg configuration saved!");
+        loadTregSettings();
+      } catch (e) {
+        toast("Error saving Treg config: " + e.message, true);
+      }
+    };
+  }
+
+  if (btnTest) {
+    btnTest.onclick = async () => {
+      const fb = $("tregTestFeedback");
+      if (fb) {
+        fb.classList.remove("hidden");
+        fb.innerHTML = `<em>Testing real-time search query…</em>`;
+      }
+      try {
+        const res = await api("/api/treg/test", {
+          method: "POST",
+          body: JSON.stringify({ query: "latest technology news 2026" })
+        });
+        if (fb) {
+          if (res.ok && res.results && res.results.length) {
+            fb.innerHTML = `
+              <div class="treg-feedback-success">
+                <strong>✓ Search Success (${res.latency_ms}ms via ${res.source})</strong>
+                <div>Retrieved ${res.count} results. Top: <em>${escapeHtml(res.results[0].title)}</em></div>
+              </div>
+            `;
+          } else {
+            fb.innerHTML = `<div class="treg-feedback-error">No results returned. Check route or internet.</div>`;
+          }
+        }
+      } catch (e) {
+        if (fb) {
+          fb.innerHTML = `<div class="treg-feedback-error">Test failed: ${escapeHtml(e.message)}</div>`;
+        }
+      }
+    };
+  }
+
+  loadTregSettings();
+}
+
+async function loadTregSettings() {
+  try {
+    const j = await api("/api/treg/status");
+    const badge = $("tregStatusBadge");
+    const subtext = $("tregAuthSubtext");
+    const routeSelect = $("tregRouteSelect");
+    const tokenInput = $("tregTokenInput");
+    const balanceTag = $("tregBalanceTag");
+
+    if (badge) {
+      if (j.installed) {
+        badge.textContent = j.version || "INSTALLED";
+        badge.className = "wb-badge wb-badge-cyan";
+      } else {
+        badge.textContent = "NOT FOUND";
+        badge.className = "wb-badge wb-badge-danger";
+      }
+    }
+
+    if (subtext) {
+      if (j.logged_in || j.token_configured) {
+        subtext.textContent = `Treg Active ${j.active_org ? '• ' + j.active_org : ''} • Proxy Ready`;
+      } else {
+        subtext.textContent = "DuckDuckGo Zero-Key Active • Add Treg Token to unlock enterprise routed providers";
+      }
+    }
+
+    if (balanceTag && j.balance) {
+      balanceTag.textContent = j.balance;
+      balanceTag.classList.remove("hidden");
+    }
+
+    if (routeSelect && j.default_route) {
+      routeSelect.value = j.default_route;
+    }
+  } catch (e) {
+    console.error("loadTregSettings error:", e);
+  }
+}
+
 function showApp() {
   document.body.dataset.mode = mode;
   $("app").classList.remove("hidden");
-  $("sessionDrawerHeading").textContent = mode === "muse" ? "Muse Stories & Brainstorms" : (mode === "architect" ? "Architect Chats" : (mode === "nsfw" ? "After Dark Chats" : "Friend Chats"));
-  $("msg").placeholder = mode === "muse" ? "Ask Muse: brainstorm plots, interrogate scenes, flesh out characters, craft dialogue…" : (mode === "architect" ? "Ask Architect: code, architecture, refactoring, systems…" : (mode === "friend" ? "Message friend…" : "Message After Dark… (local only)"));
+  $("sessionDrawerHeading").textContent = mode === "muse" ? "Muse Stories & Brainstorms" : (mode === "architect" ? "Architect Chats" : (mode === "nsfw" ? "After Dark (Unrestricted)" : "Friend Chats"));
+  $("msg").placeholder = mode === "muse" ? "Ask Muse: brainstorm plots, interrogate scenes, flesh out characters, craft dialogue…" : (mode === "architect" ? "Ask Architect: code, architecture, refactoring, systems…" : (mode === "friend" ? "Message friend…" : "Message After Dark… (unrestricted & unfiltered)"));
   $("btnMemory").classList.toggle("hidden", mode !== "friend");
   if ($("btnArchitectStack")) $("btnArchitectStack").classList.toggle("hidden", mode !== "architect");
   if ($("btnMuseBible")) $("btnMuseBible").classList.toggle("hidden", mode !== "muse");
-  wireTabs(); moveGlow(); loadPicker(); loadHistory(); loadSessions(mode); loadVramStatus(); wireThemes(); loadSkills(); wireSkills(); wireTts(); loadTtsSettings(); wireCanvas(); wireLab(); wireArena(); wireProviderForm(); wireDocHub(); wireObservatory(); wirePrompts(); wireWorkbenchMenu(); wireArchitect(); wireMuse(); wireThinkingLevels(); wireModelCartridge();
+  wireTabs(); moveGlow(); loadPicker(); loadHistory(); loadSessions(mode); loadVramStatus(); wireThemes(); loadSkills(); wireSkills(); wireTts(); loadTtsSettings(); initTranscriptModal(); wireCanvas(); wireLab(); wireArena(); wireProviderForm(); wireDocHub(); wireObservatory(); wirePrompts(); wireWorkbenchMenu(); wireArchitect(); wireMuse(); wireThinkingLevels(); wireModelCartridge(); wireWebSearch(); wireTreg(); wireWorkspaces(); loadWorkspaces(); wireMemoryCenter(); wireBackups();
 }
+
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#btnCanvasExportDoc") && !e.target.closest("#canvasExportMenu")) {
+    if ($("canvasExportMenu")) $("canvasExportMenu").classList.add("hidden");
+  }
+  if (!e.target.closest(".msg-export-wrap")) {
+    document.querySelectorAll(".msg-export-menu").forEach(m => m.classList.add("hidden"));
+  }
+});
 
 /* ---------- Interactive Canvas Workspace ---------- */
 let canvasState = {
@@ -761,11 +998,15 @@ function setCanvasTab(tab) {
   canvasState.tab = tab;
   if ($("btnCanvasPreview")) $("btnCanvasPreview").classList.toggle("on", tab === "preview");
   if ($("btnCanvasCode")) $("btnCanvasCode").classList.toggle("on", tab === "code");
+  if ($("btnCanvasContext")) $("btnCanvasContext").classList.toggle("on", tab === "context");
   if ($("canvasPreviewView")) $("canvasPreviewView").classList.toggle("hidden", tab !== "preview");
   if ($("canvasCodeView")) $("canvasCodeView").classList.toggle("hidden", tab !== "code");
+  if ($("canvasContextView")) $("canvasContextView").classList.toggle("hidden", tab !== "context");
 
   if (tab === "preview") {
     runCanvasSandbox();
+  } else if (tab === "context") {
+    fetchAndRenderContextInspector();
   }
 }
 
@@ -1232,9 +1473,13 @@ function runCanvasSandbox() {
     }
     .studio-code code {
       font-family: inherit; font-size: inherit; line-height: inherit;
-      background: transparent; border: 0; padding: 0;
+      background: transparent !important; border: 0 !important; padding: 0 !important;
+      border-radius: 0 !important; box-shadow: none !important; display: block;
     }
     /* Syntax Tokens */
+    .tok-kw, .tok-str, .tok-fn, .tok-type, .tok-num, .tok-bool, .tok-comm, .tok-tag, .tok-attr, .tok-op, .tok-prop {
+      background: transparent !important; border: 0 !important; text-decoration: none !important; box-shadow: none !important;
+    }
     .tok-kw { color: #38bdf8 !important; font-weight: 600; }
     .tok-str { color: #34d399 !important; }
     .tok-fn { color: #fbbf24 !important; font-weight: 500; }
@@ -1512,6 +1757,14 @@ function wireCanvas() {
   }
   if ($("btnCanvasPreview")) $("btnCanvasPreview").onclick = () => setCanvasTab("preview");
   if ($("btnCanvasCode")) $("btnCanvasCode").onclick = () => setCanvasTab("code");
+  if ($("btnCanvasContext")) $("btnCanvasContext").onclick = () => setCanvasTab("context");
+  if ($("btnRefreshContext")) $("btnRefreshContext").onclick = () => fetchAndRenderContextInspector();
+  if ($("btnPromptContextInspect")) {
+    $("btnPromptContextInspect").onclick = () => {
+      toggleCanvas(true);
+      setCanvasTab("context");
+    };
+  }
   if ($("btnCanvasRun")) $("btnCanvasRun").onclick = () => runCanvasSandbox();
   if ($("btnCanvasCopy")) $("btnCanvasCopy").onclick = () => {
     const code = $("canvasCodeArea") ? $("canvasCodeArea").value : canvasState.code;
@@ -1527,6 +1780,25 @@ function wireCanvas() {
   }
   if ($("btnCanvasDownload")) $("btnCanvasDownload").onclick = () => downloadCanvasFile();
   if ($("btnCanvasExportZip")) $("btnCanvasExportZip").onclick = () => exportCanvasZip();
+
+  const btnExpDoc = $("btnCanvasExportDoc");
+  const expMenu = $("canvasExportMenu");
+  if (btnExpDoc && expMenu) {
+    btnExpDoc.onclick = (e) => {
+      e.stopPropagation();
+      expMenu.classList.toggle("hidden");
+    };
+    document.querySelectorAll(".canvas-export-opt").forEach(opt => {
+      opt.onclick = (e) => {
+        e.stopPropagation();
+        expMenu.classList.add("hidden");
+        const fmt = opt.dataset.fmt;
+        const title = $("canvasTitle") ? $("canvasTitle").value : "Canvas Export";
+        const content = canvasState.code || "";
+        exportMessageDoc(content, fmt, title);
+      };
+    });
+  }
 
   // Viewport switchers
   if ($("btnViewportDesktop")) $("btnViewportDesktop").onclick = () => setCanvasViewport("desktop");
@@ -1758,11 +2030,11 @@ function wireTabs() {
     document.querySelectorAll("#tabs button").forEach(x => x.classList.remove("on"));
     b.classList.add("on"); moveGlow(); mode = b.dataset.mode;
     document.body.dataset.mode = mode;
-    $("msg").placeholder = mode === "muse" ? "Ask Muse: brainstorm plots, interrogate scenes, flesh out characters, craft dialogue…" : (mode === "architect" ? "Ask Architect: code, architecture, refactoring, systems…" : (mode === "friend" ? "Message friend…" : "Message After Dark… (local only)"));
+    $("msg").placeholder = mode === "muse" ? "Ask Muse: brainstorm plots, interrogate scenes, flesh out characters, craft dialogue…" : (mode === "architect" ? "Ask Architect: code, architecture, refactoring, systems…" : (mode === "friend" ? "Message friend…" : "Message After Dark… (unrestricted & unfiltered)"));
     $("btnMemory").classList.toggle("hidden", mode !== "friend");
     if ($("btnArchitectStack")) $("btnArchitectStack").classList.toggle("hidden", mode !== "architect");
     if ($("btnMuseBible")) $("btnMuseBible").classList.toggle("hidden", mode !== "muse");
-    $("sessionDrawerHeading").textContent = mode === "muse" ? "Muse Stories & Brainstorms" : (mode === "architect" ? "Architect Chats" : (mode === "nsfw" ? "After Dark Chats" : "Friend Chats"));
+    $("sessionDrawerHeading").textContent = mode === "muse" ? "Muse Stories & Brainstorms" : (mode === "architect" ? "Architect Chats" : (mode === "nsfw" ? "After Dark (Unrestricted)" : "Friend Chats"));
     if ($("msgModel") && cachedModelsData && cachedModelsData.per_mode) {
       const defOpt = $("msgModel").options[0];
       if (defOpt && defOpt.value === "") {
@@ -1897,7 +2169,7 @@ function wireThemes() {
 
 /* ---------- sessions sidebar ---------- */
 $("btnSessions").onclick = () => {
-  $("sessionDrawerHeading").textContent = mode === "muse" ? "MUSE // ARCHIVE" : (mode === "architect" ? "ARCHITECT // ARCHIVE" : (mode === "nsfw" ? "AFTERDARK // ARCHIVE" : "FRIEND // ARCHIVE"));
+  $("sessionDrawerHeading").textContent = mode === "muse" ? "Muse Archive" : (mode === "architect" ? "Architect Archive" : (mode === "nsfw" ? "After Dark Archive" : "Friend Archive"));
   loadSessions(mode);
   if (window.innerWidth >= 900) {
     document.body.classList.toggle("sessions-collapsed");
@@ -1910,7 +2182,7 @@ $("btnNewSession").onclick = async () => {
   try {
     const s = await api("/api/sessions", {
       method: "POST",
-      body: JSON.stringify({ mode })
+      body: JSON.stringify({ mode, workspace_id: activeWorkspaceId })
     });
     activeSessions[mode] = s.id;
     localStorage.setItem(`lamplight_session_${mode}`, s.id);
@@ -2000,7 +2272,8 @@ function renderSessionItems(sessions, container, modeKey, currentActive) {
 async function loadSessions(modeKey = mode) {
   const container = $("sessionList");
   if (!container) return;
-  const j = await api(`/api/sessions?mode=${modeKey}`).catch(() => null);
+  const wsParam = activeWorkspaceId ? `&workspace_id=${encodeURIComponent(activeWorkspaceId)}` : "";
+  const j = await api(`/api/sessions?mode=${modeKey}${wsParam}`).catch(() => null);
   if (!j) return;
   const currentActive = activeSessions[modeKey];
   allCachedSessions = j.sessions || [];
@@ -2226,6 +2499,16 @@ async function loadTtsSettings() {
       if (archSel) archSel.innerHTML = renderOpts(ttsSettings.voice_architect || "af_sky");
       if (museSel) museSel.innerHTML = renderOpts(ttsSettings.voice_muse || "af_nicole");
     }
+
+    // Load active Whisper speech-to-text model
+    fetch("/api/whisper/model", { headers: { "X-Passcode": passcode } })
+      .then(r => r.json())
+      .then(d => {
+        if (d && d.model && $("whisperModelSelect")) {
+          $("whisperModelSelect").value = d.model;
+        }
+      })
+      .catch(() => {});
   } catch (err) {
     console.warn("TTS init:", err);
   }
@@ -2336,6 +2619,58 @@ function wireTts() {
       previewVoice(v, "The muse awakens. What world, character, or mystery shall we bring to life today?", btnPrevMuse);
     };
   }
+
+  // Whisper Speech-to-Text Model Selection
+  const whisperSel = $("whisperModelSelect");
+  if (whisperSel) {
+    whisperSel.onchange = () => {
+      fetch("/api/whisper/model", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Passcode": passcode },
+        body: JSON.stringify({ model: whisperSel.value })
+      })
+      .then(r => r.json())
+      .then(d => {
+        toast(`Whisper Model set to: ${d.model || whisperSel.value} ✓`);
+      })
+      .catch(() => toast("Failed to update Whisper model", true));
+    };
+  }
+}
+
+async function exportMessageDoc(content, fmt = "pdf", title = "Document Export") {
+  if (!content) {
+    toast("No content to export", true);
+    return;
+  }
+  toast(`Generating ${fmt.toUpperCase()} document…`);
+  try {
+    const res = await fetch("/api/export/document", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Passcode": passcode
+      },
+      body: JSON.stringify({
+        content: content,
+        format: fmt,
+        title: title
+      })
+    });
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.detail || "Failed to generate document");
+
+    toast(`Document generated (${j.filename}) ✓`);
+
+    const dlLink = document.createElement("a");
+    dlLink.href = j.download_url;
+    dlLink.download = j.filename;
+    document.body.appendChild(dlLink);
+    dlLink.click();
+    dlLink.remove();
+  } catch (err) {
+    toast(err.message, true);
+  }
 }
 
 function copyBtn(el) {
@@ -2362,6 +2697,40 @@ function copyBtn(el) {
       });
   };
   actions.appendChild(copyBtnEl);
+
+  // Document Export Dropdown
+  const exportWrap = document.createElement("div");
+  exportWrap.className = "msg-export-wrap";
+  exportWrap.innerHTML = `
+    <button type="button" class="msg-action-btn export-btn" title="Export message as PDF, DOCX, or Markdown">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <span>Export ▾</span>
+    </button>
+    <div class="msg-export-menu hidden">
+      <button type="button" class="msg-export-item" data-fmt="pdf"><span>📕</span> PDF Document (.pdf)</button>
+      <button type="button" class="msg-export-item" data-fmt="docx"><span>📘</span> Word Document (.docx)</button>
+      <button type="button" class="msg-export-item" data-fmt="md"><span>📝</span> Markdown (.md)</button>
+    </div>
+  `;
+  const exportTrigger = exportWrap.querySelector(".export-btn");
+  const exportMenu = exportWrap.querySelector(".msg-export-menu");
+  exportTrigger.onclick = (ev) => {
+    ev.stopPropagation();
+    document.querySelectorAll(".msg-export-menu").forEach(m => {
+      if (m !== exportMenu) m.classList.add("hidden");
+    });
+    exportMenu.classList.toggle("hidden");
+  };
+  exportWrap.querySelectorAll(".msg-export-item").forEach(item => {
+    item.onclick = (ev) => {
+      ev.stopPropagation();
+      exportMenu.classList.add("hidden");
+      const fmt = item.dataset.fmt;
+      const rawText = el.dataset.raw || "";
+      exportMessageDoc(rawText, fmt, "Assistant Response");
+    };
+  });
+  actions.appendChild(exportWrap);
 
   const ttsBtnEl = document.createElement("button");
   ttsBtnEl.type = "button";
@@ -2401,12 +2770,78 @@ function copyBtn(el) {
 
   el.appendChild(actions);
 }
+function renderSources(el) {
+  if (!el || !el.classList.contains("bot")) return;
+  const raw = el.dataset.raw || "";
+  const linkMatches = [...raw.matchAll(/\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/g)];
+  if (!linkMatches.length) return;
+
+  const seen = new Set();
+  const sources = [];
+  for (const m of linkMatches) {
+    const title = m[1].trim();
+    const url = m[2].trim();
+    if (seen.has(url) || url.startsWith("/exports/") || url.startsWith("/uploads/")) continue;
+    seen.add(url);
+    try {
+      const u = new URL(url);
+      const domain = u.hostname.replace(/^www\./, "");
+      sources.push({ title, url, domain });
+    } catch (e) {}
+  }
+  if (!sources.length) return;
+  if (el.querySelector(".cyber-sources-bar")) return;
+
+  const bar = document.createElement("div");
+  bar.className = "cyber-sources-bar";
+
+  const head = document.createElement("div");
+  head.className = "sources-bar-head";
+  head.innerHTML = `
+    <span class="sources-head-icon">🌐</span>
+    <span class="sources-head-title">Sources &amp; Citations</span>
+    <span class="sources-count-badge">${sources.length}</span>
+  `;
+
+  const list = document.createElement("div");
+  list.className = "sources-cards-carousel";
+
+  sources.forEach((s, idx) => {
+    const card = document.createElement("a");
+    card.className = "cyber-source-chip";
+    card.href = s.url;
+    card.target = "_blank";
+    card.rel = "noopener noreferrer";
+    card.title = `${s.title}\n${s.url}`;
+    card.innerHTML = `
+      <span class="source-chip-index">${idx + 1}</span>
+      <span class="source-chip-domain">${s.domain}</span>
+      <span class="source-chip-title">${escapeHtml(s.title)}</span>
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>
+    `;
+    list.appendChild(card);
+  });
+
+  bar.appendChild(head);
+  bar.appendChild(list);
+
+  const bodyEl = el.querySelector(".msg-content-body");
+  if (bodyEl) {
+    bodyEl.insertBefore(bar, bodyEl.firstChild);
+  } else {
+    el.insertBefore(bar, el.firstChild);
+  }
+}
+
 function fmtTime(ts) {
   if (!ts) { const d = new Date(); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
   const m = ts.match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
   return m ? `${m[4]}:${m[5]}` : "";
 }
 function stamp(el, ts, modelName, skillCmd = null) {
+  if (el.classList.contains("bot")) {
+    renderSources(el);
+  }
   const s = document.createElement("span");
   s.className = "ts";
   let t = fmtTime(ts);
@@ -2447,7 +2882,58 @@ function getFileIcon(ext) {
   if ([".py", ".js", ".ts", ".html", ".css", ".json", ".sql", ".c", ".cpp", ".rs"].includes(ext)) return "💻";
   if ([".md", ".txt", ".csv", ".tsv"].includes(ext)) return "📝";
   if ([".png", ".jpg", ".jpeg", ".webp", ".gif"].includes(ext)) return "🖼️";
+  if ([".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac", ".webm", ".wma", ".opus"].includes(ext)) return "🎙️";
   return "📎";
+}
+
+function fmtDuration(s) {
+  if (!s || isNaN(s)) return "0:00";
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${m}:${sec < 10 ? '0' : ''}${sec}`;
+}
+
+function openTranscriptModal(filename, transcription, lang) {
+  if ($("transFileName")) $("transFileName").textContent = filename || "Audio File";
+  if ($("transLangBadge")) $("transLangBadge").textContent = "LANG: " + (lang || "EN").toUpperCase();
+  if ($("transModalContent")) $("transModalContent").textContent = transcription || "(No transcription captured)";
+  if ($("transModal")) $("transModal").classList.remove("hidden");
+}
+
+function initTranscriptModal() {
+  const modal = $("transModal");
+  if (!modal) return;
+  const closeBtn = $("btnCloseTransModal");
+  const dismissBtn = $("btnDismissTransModal");
+  const copyBtn = $("btnCopyTrans");
+  const insertBtn = $("btnInsertTrans");
+
+  const hide = () => modal.classList.add("hidden");
+  if (closeBtn) closeBtn.onclick = hide;
+  if (dismissBtn) dismissBtn.onclick = hide;
+
+  if (copyBtn) {
+    copyBtn.onclick = () => {
+      const text = $("transModalContent") ? $("transModalContent").textContent : "";
+      navigator.clipboard.writeText(text).then(() => {
+        toast("Transcript copied ✓");
+      });
+    };
+  }
+
+  if (insertBtn) {
+    insertBtn.onclick = () => {
+      const text = $("transModalContent") ? $("transModalContent").textContent : "";
+      const msgInput = $("msg");
+      if (msgInput) {
+        msgInput.value = (msgInput.value ? msgInput.value + "\n\n" : "") + text;
+        autosize();
+        msgInput.focus();
+        toast("Inserted into prompt ✓");
+      }
+      hide();
+    };
+  }
 }
 
 function renderAttachmentTray() {
@@ -2464,13 +2950,71 @@ function renderAttachmentTray() {
     pill.className = "attachment-pill";
     if (att.is_image) {
       pill.innerHTML = `
-        <img class="att-thumb" src="${esc(att.preview_url)}" alt="">
+        <img class="att-thumb" src="${esc(att.preview_url || att.path)}" alt="">
         <div class="att-info">
           <span class="att-name" title="${esc(att.filename)}">${esc(att.filename)}</span>
           <span class="att-size">${fmtSize(att.size)}</span>
         </div>
         <button class="att-del" type="button" title="Remove attachment">✕</button>
       `;
+    } else if (att.is_audio) {
+      pill.classList.add("audio-pill");
+      pill.innerHTML = `
+        <button class="att-audio-play" type="button" title="Play audio">
+          <svg class="play-icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          <svg class="pause-icon hidden" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+        </button>
+        <div class="att-info">
+          <div class="att-audio-row">
+            <span class="att-name" title="${esc(att.filename)}">${esc(att.filename)}</span>
+            <span class="att-lang-badge">${esc((att.language || 'en').toUpperCase())}</span>
+          </div>
+          <span class="att-size">${att.duration ? fmtDuration(att.duration) + ' • ' : ''}${fmtSize(att.size)}</span>
+        </div>
+        ${att.transcription ? `<button class="att-trans-btn" type="button" title="View transcription">Trans</button>` : ''}
+        <button class="att-del" type="button" title="Remove attachment">✕</button>
+        <audio class="att-audio-elem" src="${esc(att.audio_url || att.path)}" preload="none"></audio>
+      `;
+      const audio = pill.querySelector(".att-audio-elem");
+      const playBtn = pill.querySelector(".att-audio-play");
+      const playIcon = playBtn.querySelector(".play-icon");
+      const pauseIcon = playBtn.querySelector(".pause-icon");
+
+      playBtn.onclick = (e) => {
+        e.stopPropagation();
+        if (audio.paused) {
+          document.querySelectorAll(".att-audio-elem").forEach(a => {
+            if (a !== audio) {
+              a.pause();
+              const p = a.closest(".audio-pill");
+              if (p) {
+                p.querySelector(".play-icon")?.classList.remove("hidden");
+                p.querySelector(".pause-icon")?.classList.add("hidden");
+              }
+            }
+          });
+          audio.play();
+          playIcon.classList.add("hidden");
+          pauseIcon.classList.remove("hidden");
+        } else {
+          audio.pause();
+          playIcon.classList.remove("hidden");
+          pauseIcon.classList.add("hidden");
+        }
+      };
+
+      audio.onended = () => {
+        playIcon.classList.remove("hidden");
+        pauseIcon.classList.add("hidden");
+      };
+
+      const transBtn = pill.querySelector(".att-trans-btn");
+      if (transBtn) {
+        transBtn.onclick = (e) => {
+          e.stopPropagation();
+          openTranscriptModal(att.filename, att.transcription, att.language);
+        };
+      }
     } else {
       pill.innerHTML = `
         <span class="att-icon">${getFileIcon(att.ext)}</span>
@@ -2941,16 +3485,34 @@ function bubble(who, text, stagger = 0, time = null, modelName = null, attachmen
     const wrap = document.createElement("div");
     wrap.className = "msg-attachments";
     attachments.forEach(att => {
+      const fileUrl = att.audio_url || att.preview_url || att.path || "#";
       if (att.is_image) {
         const a = document.createElement("a");
-        a.href = att.preview_url;
+        a.href = fileUrl;
         a.target = "_blank";
-        a.innerHTML = `<img class="msg-attachment-img" src="${esc(att.preview_url)}" alt="${esc(att.filename)}" />`;
+        a.innerHTML = `<img class="msg-attachment-img" src="${esc(fileUrl)}" alt="${esc(att.filename)}" />`;
         wrap.appendChild(a);
+      } else if (att.is_audio) {
+        const audioChip = document.createElement("div");
+        audioChip.className = "msg-attachment-chip audio-chip";
+        audioChip.innerHTML = `
+          <span>🎙️</span>
+          <span class="chip-name" title="${esc(att.filename)}">${esc(att.filename)}</span>
+          <span class="att-lang-badge">${esc((att.language || 'en').toUpperCase())}</span>
+          <audio controls preload="none" src="${esc(fileUrl)}" style="height:26px; max-width:180px; margin-left:6px; vertical-align:middle;"></audio>
+          ${att.transcription ? `<button class="chip-trans-btn" type="button" title="View Transcript">Trans</button>` : ''}
+        `;
+        if (att.transcription) {
+          audioChip.querySelector(".chip-trans-btn").onclick = (e) => {
+            e.stopPropagation();
+            openTranscriptModal(att.filename, att.transcription, att.language);
+          };
+        }
+        wrap.appendChild(audioChip);
       } else {
         const a = document.createElement("a");
         a.className = "msg-attachment-chip";
-        a.href = att.preview_url;
+        a.href = fileUrl;
         a.target = "_blank";
         a.download = att.filename;
         a.innerHTML = `<span>${getFileIcon(att.ext)}</span> <span>${esc(att.filename)}</span> <small>(${fmtSize(att.size)})</small>`;
@@ -3304,9 +3866,11 @@ async function send() {
           message: v,
           model: $("msgModel").value || undefined,
           session_id: activeSessions[mode] || undefined,
+          workspace_id: activeWorkspaceId,
           attachments: attsToSend,
           skill: currentSkill ? currentSkill.command : undefined,
-          thinking_level: getThinkingLevel(mode)
+          thinking_level: getThinkingLevel(mode),
+          search_web: isWebSearchActive
         })
       });
       el.classList.remove("streaming"); el.dataset.raw = j.reply; el.innerHTML = md(j.reply); stamp(el, null, j.model, j.skill || (currentSkill ? currentSkill.command : null)); copyBtn(el);
@@ -3332,6 +3896,9 @@ async function sendStream(v, el, attachments = [], skillCmd = undefined) {
   let rawThinking = "";
   const tStream0 = performance.now();
   let tokenCount = 0;
+  if (isWebSearchActive) {
+    el.innerHTML = "<i>🌐 Searching the live web via Treg…</i>";
+  }
   const warmTimer = setTimeout(() => {
     if (!raw && !rawThinking) el.innerHTML = "<i>Warming up the model… first reply after a switch can take ~40s on this laptop.</i>";
   }, 8000);
@@ -3344,9 +3911,11 @@ async function sendStream(v, el, attachments = [], skillCmd = undefined) {
         message: v,
         model: $("msgModel").value || undefined,
         session_id: activeSessions[mode] || undefined,
+        workspace_id: activeWorkspaceId,
         attachments: attachments,
         skill: skillCmd,
-        thinking_level: getThinkingLevel(mode)
+        thinking_level: getThinkingLevel(mode),
+        search_web: isWebSearchActive
       }), signal: aborter.signal });
     if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.detail || r.statusText); }
     clearTimeout(warmTimer);
@@ -3477,7 +4046,8 @@ $("btnRegen").onclick = async () => {
         message: "",
         regenerate: true,
         model: $("msgModel").value || undefined,
-        session_id: activeSessions[mode] || undefined
+        session_id: activeSessions[mode] || undefined,
+        workspace_id: activeWorkspaceId
       }), signal: aborter.signal });
     if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.detail || r.statusText); }
     clearTimeout(warmTimer2);
@@ -7391,6 +7961,714 @@ function wireWorkbenchMenu() {
     openDrawer("promptsPanel");
     loadPrompts();
   });
+
+  $("wbItemMemoryCenter")?.addEventListener("click", () => {
+    closeWorkbenchMenu();
+    closeDrawers();
+    openMemoryCenter();
+  });
+
+  $("wbItemBackups")?.addEventListener("click", () => {
+    closeWorkbenchMenu();
+    closeDrawers();
+    openBackupModal();
+  });
+  // Global pill active state handling
+  document.addEventListener("click", (e) => {
+    const pill = e.target.closest(".cyber-pill");
+    if (pill && pill.parentElement) {
+      pill.parentElement.querySelectorAll(".cyber-pill").forEach(p => p.classList.remove("active"));
+      pill.classList.add("active");
+    }
+  });
+}
+
+/* ==========================================================================
+   Phase 1: Project Workspaces, Context Inspector & Memory Control Center
+   ========================================================================== */
+
+/* ---------- Project Workspaces ---------- */
+function wireWorkspaces() {
+  const btnSelect = $("btnWorkspaceSelect");
+  const dropdown = $("workspaceDropdown");
+  if (btnSelect && dropdown) {
+    btnSelect.onclick = (e) => {
+      e.stopPropagation();
+      const isHidden = dropdown.classList.toggle("hidden");
+      btnSelect.classList.toggle("active", !isHidden);
+      btnSelect.setAttribute("aria-expanded", String(!isHidden));
+    };
+  }
+
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("#workspacePillWrap")) {
+      dropdown?.classList.add("hidden");
+      btnSelect?.classList.remove("active");
+      btnSelect?.setAttribute("aria-expanded", "false");
+    }
+  });
+
+  // Global shortcut: Cmd+K / Ctrl+K opens Workspace Switcher
+  document.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      openWorkspaceManageModal();
+    }
+  });
+
+  // New Workspace Trigger in Dropdown
+  $("btnNewWorkspace")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    dropdown?.classList.add("hidden");
+    btnSelect?.classList.remove("active");
+    openWorkspaceModal();
+  });
+
+  // Manage Workspaces Trigger in Dropdown
+  $("btnManageWorkspaces")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    dropdown?.classList.add("hidden");
+    btnSelect?.classList.remove("active");
+    openWorkspaceManageModal();
+  });
+
+  // Modal actions
+  $("btnCloseWorkspaceModal")?.addEventListener("click", () => $("workspaceModal").classList.add("hidden"));
+  $("btnCancelWorkspaceModal")?.addEventListener("click", () => $("workspaceModal").classList.add("hidden"));
+  $("btnSaveWorkspaceModal")?.addEventListener("click", saveWorkspaceModal);
+
+  $("btnAddNewWsFromManage")?.addEventListener("click", () => {
+    $("workspaceManageModal").classList.add("hidden");
+    openWorkspaceModal();
+  });
+  $("btnCloseWorkspaceManageModal")?.addEventListener("click", () => $("workspaceManageModal").classList.add("hidden"));
+  $("btnDismissWorkspaceManageModal")?.addEventListener("click", () => $("workspaceManageModal").classList.add("hidden"));
+}
+
+async function loadWorkspaces() {
+  try {
+    const j = await api("/api/workspaces").catch(() => null);
+    if (!j) return;
+    allCachedWorkspaces = j.workspaces || [];
+    
+    // Update active label
+    const cur = allCachedWorkspaces.find(w => w.id === activeWorkspaceId) || allCachedWorkspaces[0];
+    if (cur) {
+      activeWorkspaceId = cur.id;
+      localStorage.setItem("lamplight_workspace", cur.id);
+      if ($("activeWorkspaceLabel")) $("activeWorkspaceLabel").textContent = cur.name;
+    }
+
+    // Populate dropdown items
+    const list = $("workspaceListItems");
+    if (list) {
+      list.innerHTML = "";
+      allCachedWorkspaces.forEach(ws => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `ws-item-btn ${ws.id === activeWorkspaceId ? "active" : ""}`;
+        btn.innerHTML = `
+          <div class="ws-item-left">
+            <span class="ws-item-name">${esc(ws.name)}</span>
+            <span class="ws-item-sub">${ws.repo_path ? esc(ws.repo_path) : "No bound repo"}</span>
+          </div>
+          ${ws.id === activeWorkspaceId ? '<span class="ws-active-badge">ACTIVE</span>' : ''}
+        `;
+        btn.onclick = () => switchWorkspace(ws.id, ws.name);
+        list.appendChild(btn);
+      });
+    }
+
+    // Populate model options in workspace modal form
+    const wsModelSelect = $("wsInputModel");
+    if (wsModelSelect && $("msgModel")) {
+      const curVal = wsModelSelect.value;
+      wsModelSelect.innerHTML = '<option value="">(Inherit Global / Mode Default)</option>';
+      Array.from($("msgModel").options).forEach(opt => {
+        if (opt.value) {
+          const o = document.createElement("option");
+          o.value = opt.value;
+          o.textContent = opt.textContent;
+          wsModelSelect.appendChild(o);
+        }
+      });
+      if (curVal) wsModelSelect.value = curVal;
+    }
+  } catch (err) {
+    console.error("loadWorkspaces error:", err);
+  }
+}
+
+async function switchWorkspace(id, name) {
+  activeWorkspaceId = id;
+  localStorage.setItem("lamplight_workspace", id);
+  if ($("activeWorkspaceLabel")) $("activeWorkspaceLabel").textContent = name;
+  $("workspaceDropdown")?.classList.add("hidden");
+  $("btnWorkspaceSelect")?.classList.remove("active");
+  $("btnWorkspaceSelect")?.setAttribute("aria-expanded", "false");
+  
+  await loadWorkspaces();
+  await loadSessions(mode);
+  toast(`Switched to workspace: ${name}`);
+
+  // Refresh context inspector if open
+  if (canvasState.open && canvasState.tab === "context") {
+    fetchAndRenderContextInspector();
+  }
+}
+
+function openWorkspaceModal(ws = null) {
+  const modal = $("workspaceModal");
+  if (!modal) return;
+  $("wsInputId").value = ws ? ws.id : "";
+  $("workspaceModalTitle").textContent = ws ? "Edit Project Workspace" : "New Project Workspace";
+  $("wsInputName").value = ws ? ws.name : "";
+  $("wsInputRepo").value = ws ? (ws.repo_path || "") : "";
+  $("wsInputInstructions").value = ws ? (ws.domain_instructions || "") : "";
+  if ($("wsInputModel")) $("wsInputModel").value = ws ? (ws.model_preference || "") : "";
+  modal.classList.remove("hidden");
+  $("wsInputName").focus();
+}
+
+async function saveWorkspaceModal() {
+  const id = $("wsInputId").value.trim();
+  const name = $("wsInputName").value.trim();
+  if (!name) { toast("Workspace name is required.", true); return; }
+  const repo_path = $("wsInputRepo").value.trim() || null;
+  const domain_instructions = $("wsInputInstructions").value.trim() || null;
+  const model_preference = $("wsInputModel") ? ($("wsInputModel").value || null) : null;
+
+  try {
+    if (id) {
+      await api(`/api/workspaces/${encodeURIComponent(id)}`, {
+        method: "PUT",
+        body: JSON.stringify({ name, repo_path, domain_instructions, model_preference })
+      });
+      toast("Workspace updated!");
+    } else {
+      const created = await api("/api/workspaces", {
+        method: "POST",
+        body: JSON.stringify({ name, repo_path, domain_instructions, model_preference })
+      });
+      const wsObj = created.workspace || created;
+      activeWorkspaceId = wsObj.id;
+      localStorage.setItem("lamplight_workspace", wsObj.id);
+      toast(`Created workspace: ${name}`);
+    }
+    $("workspaceModal").classList.add("hidden");
+    await loadWorkspaces();
+    await loadSessions(mode);
+  } catch (err) {
+    toast("Failed to save workspace: " + err.message, true);
+  }
+}
+
+function openWorkspaceManageModal() {
+  const modal = $("workspaceManageModal");
+  if (!modal) return;
+  renderWorkspaceManageList();
+  modal.classList.remove("hidden");
+}
+
+function renderWorkspaceManageList() {
+  const list = $("workspaceManageList");
+  if (!list) return;
+  list.innerHTML = "";
+  if (!allCachedWorkspaces.length) {
+    list.innerHTML = '<div class="muted" style="padding:16px;text-align:center;">No workspaces found.</div>';
+    return;
+  }
+
+  allCachedWorkspaces.forEach(ws => {
+    const item = document.createElement("div");
+    item.className = "ws-manage-item";
+    const isCur = ws.id === activeWorkspaceId;
+    item.innerHTML = `
+      <div class="ws-manage-info">
+        <div class="ws-manage-title-row">
+          <span class="ws-manage-title">${esc(ws.name)}</span>
+          ${isCur ? '<span class="ws-active-badge">CURRENT</span>' : ''}
+          ${ws.is_default ? '<span class="wb-badge wb-badge-cyan">DEFAULT</span>' : ''}
+        </div>
+        <div class="ws-manage-sub">${ws.repo_path ? esc(ws.repo_path) : "No bound repository"}</div>
+      </div>
+      <div class="ws-manage-actions">
+        ${!isCur ? `<button type="button" class="cyber-btn ghost-sm btn-activate-ws">Switch</button>` : ''}
+        <button type="button" class="cyber-btn ghost-sm btn-edit-ws">Edit</button>
+        ${!ws.is_default ? `<button type="button" class="cyber-btn ghost-sm danger btn-del-ws">Delete</button>` : ''}
+      </div>
+    `;
+
+    item.querySelector(".btn-activate-ws")?.addEventListener("click", () => {
+      $("workspaceManageModal").classList.add("hidden");
+      switchWorkspace(ws.id, ws.name);
+    });
+
+    item.querySelector(".btn-edit-ws")?.addEventListener("click", () => {
+      $("workspaceManageModal").classList.add("hidden");
+      openWorkspaceModal(ws);
+    });
+
+    item.querySelector(".btn-del-ws")?.addEventListener("click", async () => {
+      const ok = await askConfirm(`Are you sure you want to delete workspace "${ws.name}"?`);
+      if (!ok) return;
+      try {
+        await api(`/api/workspaces/${encodeURIComponent(ws.id)}`, { method: "DELETE" });
+        toast("Workspace deleted.");
+        if (activeWorkspaceId === ws.id) {
+          activeWorkspaceId = "ws_default";
+          localStorage.setItem("lamplight_workspace", "ws_default");
+        }
+        await loadWorkspaces();
+        renderWorkspaceManageList();
+        await loadSessions(mode);
+      } catch (err) {
+        toast("Failed to delete workspace: " + err.message, true);
+      }
+    });
+
+    list.appendChild(item);
+  });
+}
+
+/* ---------- Canvas Context Inspector ---------- */
+let contextDebounceTimer = null;
+
+async function fetchAndRenderContextInspector() {
+  try {
+    const payload = {
+      mode,
+      message: $("msg") ? $("msg").value : "",
+      session_id: activeSessions[mode] || undefined,
+      workspace_id: activeWorkspaceId,
+      model: $("msgModel") ? $("msgModel").value || undefined : undefined
+    };
+
+    const data = await api("/api/context/inspect", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }).catch(() => null);
+
+    if (!data) return;
+
+    // Update Telemetry & Badges
+    if ($("ciModelTag")) $("ciModelTag").textContent = data.model;
+    const used = data.estimated_tokens || data.total_estimated_tokens || 0;
+    const limit = data.context_limit || 8192;
+    const pct = Math.min(100, Math.round((used / limit) * 100));
+
+    if ($("ciTokensUsed")) $("ciTokensUsed").textContent = `${used.toLocaleString()} / ${limit.toLocaleString()} tokens`;
+    if ($("ciPercentUsed")) $("ciPercentUsed").textContent = `${pct}%`;
+    if ($("ciMeterFill")) {
+      $("ciMeterFill").style.width = `${pct}%`;
+      $("ciMeterFill").style.background = pct > 85 ? '#ef4444' : (pct > 65 ? '#f59e0b' : '#10b981');
+    }
+
+    // Update Prompt Bar Live Badge
+    if ($("hudTokenCount")) {
+      $("hudTokenCount").textContent = used > 1000 ? `~${(used / 1000).toFixed(1)}k tok` : `${used} tok`;
+    }
+
+    // Render Layer Cards
+    const container = $("ciLayersList");
+    if (!container) return;
+    container.innerHTML = "";
+
+    let layersList = [];
+    if (Array.isArray(data.layers)) {
+      layersList = data.layers;
+    } else if (data.layers && typeof data.layers === "object") {
+      const l = data.layers;
+      
+      // 1. Workspace
+      if (l.workspace_instructions) {
+        const wi = l.workspace_instructions;
+        const wsHasContent = (wi.content && wi.content.trim()) || wi.repo_path;
+        layersList.push({
+          name: `Workspace: ${wi.name || "Default"}`,
+          tokens: wi.est_tokens || 0,
+          preview: wsHasContent
+            ? `${wi.repo_path ? "Bound Repo: " + wi.repo_path + "\n\n" : ""}${wi.content || "No custom domain instructions."}`
+            : "No custom domain instructions set for this workspace."
+        });
+      }
+
+      // 2. Scoped & Global Memories
+      if (Array.isArray(l.memories) && l.memories.length > 0) {
+        const totalMemTokens = l.memories.reduce((acc, m) => acc + (m.est_tokens || 0), 0);
+        layersList.push({
+          name: `Persistent Memories (${l.memories.length} facts)`,
+          tokens: totalMemTokens,
+          items: l.memories
+        });
+      }
+
+      // 3. Persona / System
+      if (l.system_persona) {
+        const sp = l.system_persona;
+        layersList.push({
+          name: `Persona: ${sp.mode ? sp.mode.toUpperCase() : "SYSTEM"} Core`,
+          tokens: sp.est_tokens || 0,
+          preview: sp.content || "Standard system instructions"
+        });
+      }
+
+      // 4. History Turns
+      if (Array.isArray(l.history_turns) && l.history_turns.length > 0) {
+        const totalHistTokens = l.history_turns.reduce((acc, t) => acc + (t.est_tokens || 0), 0);
+        layersList.push({
+          name: `Conversation History (${l.history_turns.length} turns)`,
+          tokens: totalHistTokens,
+          items: l.history_turns
+        });
+      }
+
+      // 5. Active Skill / Commands (if present)
+      if (l.skill && l.skill.name) {
+        layersList.push({
+          name: `Active Skill: /${l.skill.command || l.skill.name}`,
+          tokens: Math.max(1, Math.round((l.skill.prompt ? l.skill.prompt.length : 0) / 4)),
+          preview: l.skill.prompt || ""
+        });
+      }
+
+      // 6. User Prompt
+      if (l.user_prompt) {
+        const up = l.user_prompt;
+        layersList.push({
+          name: "Current User Prompt",
+          tokens: up.est_tokens || 0,
+          preview: up.content || "Awaiting input..."
+        });
+      }
+    }
+
+    layersList.forEach((layer, idx) => {
+      const card = document.createElement("div");
+      card.className = "ci-layer-card" + (idx === 0 || idx === layersList.length - 1 ? " expanded" : "");
+
+      let badgeClass = "ci-badge-system";
+      if (layer.name.includes("Workspace")) badgeClass = "ci-badge-workspace";
+      else if (layer.name.includes("Memories")) badgeClass = "ci-badge-memory";
+      else if (layer.name.includes("History")) badgeClass = "ci-badge-history";
+      else if (layer.name.includes("Input") || layer.name.includes("Prompt")) badgeClass = "ci-badge-input";
+
+      let innerContent = "";
+      if (layer.items && layer.items.length) {
+        if (layer.name.includes("Memories")) {
+          innerContent = layer.items.map(m => `
+            <div class="ci-mem-item">
+              <span class="mem-scope-pill mem-scope-${m.scope}">${esc(m.scope)}</span>
+              <span class="mem-cat-pill">${esc(m.category)}</span>
+              <div style="margin-top:3px;">${esc(m.content)}</div>
+            </div>
+          `).join("");
+        } else if (layer.name.includes("History")) {
+          innerContent = layer.items.map(t => `
+            <div class="ci-turn-item">
+              <strong style="color:${t.role === 'user' ? '#38bdf8' : '#a855f7'}; text-transform:uppercase;">${esc(t.role)}</strong>
+              <span class="muted" style="font-size:0.7rem; margin-left:6px;">~${t.tokens} tok</span>
+              <div style="margin-top:2px; font-family:'JetBrains Mono', monospace; font-size:0.75rem;">${esc(t.content ? t.content.slice(0, 150) + (t.content.length > 150 ? '…' : '') : '')}</div>
+            </div>
+          `).join("");
+        }
+      } else {
+        innerContent = `<pre>${esc(layer.preview || "No content")}</pre>`;
+      }
+
+      card.innerHTML = `
+        <div class="ci-layer-header">
+          <div class="ci-layer-title-wrap">
+            <span class="ci-layer-badge ${badgeClass}">${esc(layer.name.split(' ')[0])}</span>
+            <span class="ci-layer-name">${esc(layer.name)}</span>
+          </div>
+          <div class="ci-layer-stats">
+            <span class="ci-layer-tok-tag">~${layer.tokens.toLocaleString()} tok</span>
+            <span class="ci-expand-icon">▾</span>
+          </div>
+        </div>
+        <div class="ci-layer-body ${idx === 0 || idx === layersList.length - 1 ? "" : "hidden"}">
+          ${innerContent}
+        </div>
+      `;
+
+      card.querySelector(".ci-layer-header").onclick = () => {
+        const body = card.querySelector(".ci-layer-body");
+        const isOpen = !body.classList.toggle("hidden");
+        card.classList.toggle("expanded", isOpen);
+      };
+
+      container.appendChild(card);
+    });
+  } catch (err) {
+    console.error("fetchAndRenderContextInspector error:", err);
+  }
+}
+
+// Prompt bar token estimate listener
+$("msg")?.addEventListener("input", () => {
+  clearTimeout(contextDebounceTimer);
+  contextDebounceTimer = setTimeout(() => {
+    fetchAndRenderContextInspector();
+  }, 600);
+});
+
+/* ---------- Memory Control Center ---------- */
+let allCachedMemories = [];
+let activeMemScopeFilter = "all";
+
+function wireMemoryCenter() {
+  $("btnCloseMemoryModal")?.addEventListener("click", () => $("memoryCenterModal").classList.add("hidden"));
+  $("btnDismissMemoryModal")?.addEventListener("click", () => $("memoryCenterModal").classList.add("hidden"));
+
+  // Add memory drawer toggle
+  $("btnAddNewMemory")?.addEventListener("click", () => {
+    const drawer = $("addMemoryDrawer");
+    if (!drawer) return;
+    const isHidden = drawer.classList.toggle("hidden");
+    if (!isHidden) $("newMemContent")?.focus();
+  });
+
+  $("btnCancelNewMemory")?.addEventListener("click", () => {
+    $("addMemoryDrawer")?.classList.add("hidden");
+  });
+
+  $("btnSaveNewMemory")?.addEventListener("click", async () => {
+    const content = $("newMemContent")?.value.trim();
+    if (!content) { toast("Memory content cannot be empty.", true); return; }
+    const scope = $("newMemScope")?.value || "global";
+    const category = $("newMemCategory")?.value || "fact";
+    try {
+      await api("/api/memories", {
+        method: "POST",
+        body: JSON.stringify({
+          workspace_id: scope === "workspace" ? activeWorkspaceId : null,
+          scope,
+          category,
+          content
+        })
+      });
+      $("newMemContent").value = "";
+      $("addMemoryDrawer").classList.add("hidden");
+      toast("Memory saved!");
+      await loadMemories(activeMemScopeFilter, $("memorySearchInput")?.value || "");
+      if (canvasState.open && canvasState.tab === "context") fetchAndRenderContextInspector();
+    } catch (err) {
+      toast("Failed to save memory: " + err.message, true);
+    }
+  });
+
+  // Filter tabs
+  document.querySelectorAll(".mem-tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".mem-tab-btn").forEach(b => b.classList.remove("on"));
+      btn.classList.add("on");
+      activeMemScopeFilter = btn.dataset.scope || "all";
+      renderMemoryCards(filterMemoriesList(activeMemScopeFilter, $("memorySearchInput")?.value || ""));
+    });
+  });
+
+  // Search input
+  $("memorySearchInput")?.addEventListener("input", () => {
+    const q = ($("memorySearchInput").value || "").trim();
+    renderMemoryCards(filterMemoriesList(activeMemScopeFilter, q));
+  });
+}
+
+function openMemoryCenter() {
+  const modal = $("memoryCenterModal");
+  if (!modal) return;
+  modal.classList.remove("hidden");
+  loadMemories(activeMemScopeFilter, $("memorySearchInput")?.value || "");
+}
+
+async function loadMemories(scopeFilter = "all", searchQ = "") {
+  try {
+    const wsParam = activeWorkspaceId ? `?workspace_id=${encodeURIComponent(activeWorkspaceId)}` : "";
+    const j = await api(`/api/memories${wsParam}`).catch(() => null);
+    if (!j) return;
+    allCachedMemories = j.memories || [];
+    renderMemoryCards(filterMemoriesList(scopeFilter, searchQ));
+  } catch (err) {
+    console.error("loadMemories error:", err);
+  }
+}
+
+function filterMemoriesList(scopeFilter, searchQ) {
+  let list = allCachedMemories;
+  if (scopeFilter === "global") {
+    list = list.filter(m => m.scope === "global");
+  } else if (scopeFilter === "workspace") {
+    list = list.filter(m => m.scope === "workspace");
+  }
+  if (searchQ) {
+    const q = searchQ.toLowerCase();
+    list = list.filter(m => (m.content || "").toLowerCase().includes(q) || (m.category || "").toLowerCase().includes(q));
+  }
+  return list;
+}
+
+function renderMemoryCards(list) {
+  const container = $("memoryListCards");
+  if (!container) return;
+  container.innerHTML = "";
+
+  if ($("memoryStatsFooter")) {
+    $("memoryStatsFooter").textContent = `${list.length} memories displayed (${allCachedMemories.length} total)`;
+  }
+
+  if (!list.length) {
+    container.innerHTML = '<div class="muted" style="padding:24px;text-align:center;">No matching memories found.</div>';
+    return;
+  }
+
+  list.forEach(m => {
+    const card = document.createElement("div");
+    card.className = "memory-card";
+    card.innerHTML = `
+      <div class="mem-card-head">
+        <div class="mem-card-tags">
+          <span class="mem-scope-pill mem-scope-${m.scope}">${esc(m.scope)}</span>
+          <span class="mem-cat-pill">${esc(m.category)}</span>
+        </div>
+        <div class="mem-card-actions">
+          <button type="button" class="mem-btn-action btn-edit-mem">Edit</button>
+          <button type="button" class="mem-btn-action danger btn-del-mem">Delete</button>
+        </div>
+      </div>
+      <div class="mem-card-content" id="memText_${m.id}">${esc(m.content)}</div>
+      <div class="mem-card-footer">
+        <span>${m.created_at ? new Date(m.created_at).toLocaleString() : ""}</span>
+        ${m.source_session_id ? `<span class="muted">Session: ${m.source_session_id.slice(0, 8)}…</span>` : ''}
+      </div>
+    `;
+
+    // Inline edit handler
+    const btnEdit = card.querySelector(".btn-edit-mem");
+    const contentEl = card.querySelector(`#memText_${m.id}`);
+    let isEditing = false;
+
+    btnEdit.onclick = async () => {
+      if (!isEditing) {
+        isEditing = true;
+        btnEdit.textContent = "Save";
+        const curText = m.content;
+        contentEl.innerHTML = `<textarea class="mem-card-edit-area" rows="2">${esc(curText)}</textarea>`;
+        contentEl.querySelector("textarea")?.focus();
+      } else {
+        const newText = contentEl.querySelector("textarea")?.value.trim();
+        if (!newText) { toast("Memory cannot be empty.", true); return; }
+        try {
+          await api(`/api/memories/${encodeURIComponent(m.id)}`, {
+            method: "PUT",
+            body: JSON.stringify({ content: newText })
+          });
+          m.content = newText;
+          isEditing = false;
+          btnEdit.textContent = "Edit";
+          contentEl.textContent = newText;
+          toast("Memory updated!");
+          if (canvasState.open && canvasState.tab === "context") fetchAndRenderContextInspector();
+        } catch (err) {
+          toast("Failed to update memory: " + err.message, true);
+        }
+      }
+    };
+
+    // Delete handler
+    card.querySelector(".btn-del-mem").onclick = async () => {
+      const ok = await askConfirm("Delete this persistent memory?");
+      if (!ok) return;
+      try {
+        await api(`/api/memories/${encodeURIComponent(m.id)}`, { method: "DELETE" });
+        toast("Memory deleted.");
+        allCachedMemories = allCachedMemories.filter(x => x.id !== m.id);
+        renderMemoryCards(filterMemoriesList(activeMemScopeFilter, $("memorySearchInput")?.value || ""));
+        if (canvasState.open && canvasState.tab === "context") fetchAndRenderContextInspector();
+      } catch (err) {
+        toast("Failed to delete memory: " + err.message, true);
+      }
+    };
+
+    container.appendChild(card);
+  });
+}
+
+/* ---------- Database Backups & Snapshots ---------- */
+function wireBackups() {
+  $("btnCloseBackupModal")?.addEventListener("click", () => $("backupModal").classList.add("hidden"));
+  $("btnDismissBackupModal")?.addEventListener("click", () => $("backupModal").classList.add("hidden"));
+
+  $("btnCreateBackupNow")?.addEventListener("click", async () => {
+    try {
+      const btn = $("btnCreateBackupNow");
+      if (btn) btn.disabled = true;
+      toast("Creating SQLite snapshot via VACUUM INTO…");
+      const res = await api("/api/backup/create", { method: "POST" });
+      const sizeMb = ((res.snapshot.file_size || res.snapshot.size_bytes || 0) / (1024 * 1024)).toFixed(2);
+      toast(`Snapshot saved: ${res.snapshot.filename} (${sizeMb} MB)`);
+      if (btn) btn.disabled = false;
+      await loadBackups();
+    } catch (err) {
+      toast("Backup failed: " + err.message, true);
+      if ($("btnCreateBackupNow")) $("btnCreateBackupNow").disabled = false;
+    }
+  });
+}
+
+function openBackupModal() {
+  const modal = $("backupModal");
+  if (!modal) return;
+  modal.classList.remove("hidden");
+  loadBackups();
+}
+
+async function loadBackups() {
+  const list = $("backupSnapshotsList");
+  if (!list) return;
+  try {
+    const j = await api("/api/backup/list").catch(() => null);
+    if (!j) return;
+    const snapshots = j.backups || j.snapshots || [];
+    list.innerHTML = "";
+
+    if (!snapshots.length) {
+      list.innerHTML = '<div class="muted" style="padding:24px;text-align:center;">No backup snapshots found. Click "Create Snapshot" to generate an atomic backup.</div>';
+      return;
+    }
+
+    snapshots.forEach(s => {
+      const item = document.createElement("div");
+      item.className = "backup-item";
+      const mb = ((s.file_size || s.size_bytes || 0) / (1024 * 1024)).toFixed(2);
+      item.innerHTML = `
+        <div class="backup-item-info">
+          <span class="backup-item-title">${esc(s.filename)}</span>
+          <span class="backup-item-meta">${mb} MB · ${new Date(s.created_at).toLocaleString()}</span>
+        </div>
+        <div class="backup-item-actions">
+          <a href="/api/backup/download/${encodeURIComponent(s.id)}" class="cyber-btn ghost-sm" download="${esc(s.filename)}">⬇ Download</a>
+          <button type="button" class="cyber-btn ghost-sm danger btn-del-backup">Delete</button>
+        </div>
+      `;
+
+      item.querySelector(".btn-del-backup").onclick = async () => {
+        const ok = await askConfirm(`Delete backup snapshot "${s.filename}"?`);
+        if (!ok) return;
+        try {
+          await api(`/api/backup/${encodeURIComponent(s.id)}`, { method: "DELETE" });
+          toast("Snapshot deleted.");
+          loadBackups();
+        } catch (err) {
+          toast("Failed to delete snapshot: " + err.message, true);
+        }
+      };
+
+      list.appendChild(item);
+    });
+  } catch (err) {
+    console.error("loadBackups error:", err);
+  }
 }
 
 boot();

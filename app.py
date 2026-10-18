@@ -2,12 +2,16 @@
 $0, no cloud calls. Other modes (friend/reminders/search) share the same shell."""
 import base64
 import hashlib
+import html
 import json
+import os
 import re
+import shutil
 import subprocess
 import tempfile
 import threading
 import time
+import urllib.parse
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -22,9 +26,10 @@ import db
 
 OLLAMA_URL = "http://localhost:11434"
 KEEP_ALIVE = "30m"
-DEFAULT_MODELS = {"nsfw": "llama3.2:3b", "friend": "llama3.2:3b",
+DEFAULT_MODELS = {"nsfw": "Qwen3.5-uncensored:latest", "friend": "llama3.2:3b",
                   "architect": "qwen3:4b", "muse": "Qwen3.5-uncensored:latest",
                   "reminders": "llama3.2:3b", "search": "qwen3:4b"}
+TREG_BIN = shutil.which("treg") or os.path.expanduser("~/.local/bin/treg")
 DEFAULT_PROMPTS = {
     "friend": (
         "You are a warm, genuine, and close personal friend chatting over text. "
@@ -33,9 +38,9 @@ DEFAULT_PROMPTS = {
         "assistant or customer service bot. Be thoughtful and authentic."
     ),
     "nsfw": (
-        "You are an engaging, uninhibited adult roleplay companion for a consenting adult. "
-        "Stay completely in character, embrace romantic and physical tension with vivid senses, "
-        "and maintain a playful, immersive atmosphere without judgment, lectures, or breaking character."
+        "You are After Dark: an unrestricted, intellectually unconstrained, and deeply candid AI companion. "
+        "You provide direct, unfiltered, and deeply honest insights on any topic, inquiry, or thought experiment. "
+        "You never lecture, judge, preach, or add corporate safety disclaimers. You speak with radical candor and clarity."
     ),
     "architect": (
         "You are Architect, an elite Staff Software Engineer and Technical Systems Architect. "
@@ -194,8 +199,11 @@ db.init()
 BASE = Path(__file__).parent
 UPLOAD_DIR = BASE / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
+EXPORTS_DIR = BASE / "exports"
+EXPORTS_DIR.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+app.mount("/exports", StaticFiles(directory=EXPORTS_DIR), name="exports")
 app.mount("/prototypes", StaticFiles(directory=BASE / "prototypes", html=True), name="prototypes")
 
 
@@ -215,15 +223,46 @@ def _passcode_ok(x_passcode: str | None) -> bool:
 
 _whisper_lock = threading.Lock()
 _whisper_instance = None
+_current_whisper_model = None
 
 
 def _get_whisper():
-    global _whisper_instance
+    global _whisper_instance, _current_whisper_model
+    model_name = db.get_setting("whisper_model") or "base"
     with _whisper_lock:
-        if _whisper_instance is None:
+        if _whisper_instance is None or _current_whisper_model != model_name:
             from faster_whisper import WhisperModel
-            _whisper_instance = WhisperModel("tiny.en", device="cpu", compute_type="int8")
+            try:
+                _whisper_instance = WhisperModel(model_name, device="cpu", compute_type="int8")
+                _current_whisper_model = model_name
+            except Exception:
+                _whisper_instance = WhisperModel("tiny.en", device="cpu", compute_type="int8")
+                _current_whisper_model = "tiny.en"
         return _whisper_instance
+
+
+def transcribe_audio_file(filepath: Path) -> dict:
+    """Extract audio duration and transcribe audio via faster-whisper with ffmpeg resampling."""
+    try:
+        import numpy as np
+        cmd = ["ffmpeg", "-nostdin", "-threads", "0", "-i", str(filepath), "-f", "s16le", "-ac", "1", "-ar", "16000", "-"]
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if proc.returncode != 0 or not proc.stdout:
+            err_msg = proc.stderr.decode("utf-8", errors="ignore")[:300] if proc.stderr else "Empty audio data"
+            return {"text": "", "error": f"ffmpeg conversion failed: {err_msg}", "duration_sec": 0, "language": "unknown"}
+        audio_arr = np.frombuffer(proc.stdout, np.int16).flatten().astype(np.float32) / 32768.0
+        dur_sec = len(audio_arr) / 16000.0
+        if len(audio_arr) < 1600:  # less than 0.1s
+            return {"text": "", "duration_sec": round(dur_sec, 1), "language": "en"}
+
+        model = _get_whisper()
+        segments, info = model.transcribe(audio_arr, beam_size=1)
+        text = " ".join(seg.text.strip() for seg in segments if seg.text.strip())
+        lang = getattr(info, "language", "en") if info else "en"
+        return {"text": text.strip(), "duration_sec": round(dur_sec, 1), "language": lang}
+    except Exception as e:
+        return {"text": "", "error": str(e), "duration_sec": 0, "language": "unknown"}
+
 
 
 _tts_lock = threading.Lock()
@@ -287,6 +326,140 @@ def clean_tts_text(text: str) -> str:
     return t[:1500]
 
 
+def _add_formatted_runs(p, text: str):
+    tokens = re.split(r"(\*\*.*?\*\*|\*.*?\*|`.*?`)", text)
+    for token in tokens:
+        if not token:
+            continue
+        if token.startswith("**") and token.endswith("**") and len(token) >= 4:
+            run = p.add_run(token[2:-2])
+            run.bold = True
+        elif token.startswith("*") and token.endswith("*") and len(token) >= 2:
+            run = p.add_run(token[1:-1])
+            run.italic = True
+        elif token.startswith("`") and token.endswith("`") and len(token) >= 2:
+            run = p.add_run(token[1:-1])
+            run.font.name = "Courier New"
+        else:
+            p.add_run(token)
+
+
+def markdown_to_docx(content: str, title: str, docx_path: Path):
+    import docx
+    from docx.shared import Inches, Pt, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    doc = docx.Document()
+    for section in doc.sections:
+        section.top_margin = Inches(1)
+        section.bottom_margin = Inches(1)
+        section.left_margin = Inches(1)
+        section.right_margin = Inches(1)
+
+    title_p = doc.add_heading(title, 0)
+    title_p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+
+    lines = content.split("\n")
+    in_code_block = False
+    code_lines = []
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            if in_code_block:
+                code_text = "\n".join(code_lines)
+                p = doc.add_paragraph()
+                p.paragraph_format.left_indent = Inches(0.25)
+                run = p.add_run(code_text)
+                run.font.name = "Courier New"
+                run.font.size = Pt(9.5)
+                run.font.color.rgb = RGBColor(40, 44, 52)
+                code_lines = []
+                in_code_block = False
+            else:
+                in_code_block = True
+                code_lines = []
+            continue
+
+        if in_code_block:
+            code_lines.append(line)
+            continue
+
+        if not stripped:
+            continue
+
+        if stripped.startswith("# "):
+            doc.add_heading(stripped[2:], level=1)
+        elif stripped.startswith("## "):
+            doc.add_heading(stripped[3:], level=2)
+        elif stripped.startswith("### "):
+            doc.add_heading(stripped[4:], level=3)
+        elif stripped.startswith("#### "):
+            doc.add_heading(stripped[5:], level=4)
+        elif stripped.startswith("- ") or stripped.startswith("* "):
+            p = doc.add_paragraph(style='List Bullet')
+            _add_formatted_runs(p, stripped[2:])
+        elif re.match(r"^\d+\.\s", stripped):
+            item_text = re.sub(r"^\d+\.\s", "", stripped)
+            p = doc.add_paragraph(style='List Number')
+            _add_formatted_runs(p, item_text)
+        elif stripped.startswith("> "):
+            p = doc.add_paragraph()
+            p.paragraph_format.left_indent = Inches(0.3)
+            run = p.add_run(stripped[2:])
+            run.italic = True
+            run.font.color.rgb = RGBColor(100, 116, 139)
+        else:
+            p = doc.add_paragraph()
+            _add_formatted_runs(p, line)
+
+    doc.save(str(docx_path))
+
+
+def build_document(title: str, fmt: str, content: str, raw_filename: str | None = None) -> dict:
+    fmt = (fmt or "pdf").lower().strip()
+    if fmt not in ("pdf", "docx", "md"):
+        fmt = "pdf"
+
+    clean_title = re.sub(r"[^\w\s-]", "", title or "Document").strip() or "Document"
+    base_name = re.sub(r"[^\w\s-]", "", raw_filename).strip() if raw_filename else clean_title.replace(" ", "_")
+    base_name = base_name[:40] or "Document"
+    uid = uuid.uuid4().hex[:6]
+    out_name = f"{base_name}_{uid}.{fmt}"
+    out_path = EXPORTS_DIR / out_name
+
+    if fmt == "md":
+        full_content = f"# {title}\n\n{content}" if not content.startswith("# ") else content
+        out_path.write_text(full_content, encoding="utf-8")
+    elif fmt == "docx":
+        markdown_to_docx(content, title, out_path)
+    elif fmt == "pdf":
+        temp_docx = EXPORTS_DIR / f"temp_{uid}.docx"
+        markdown_to_docx(content, title, temp_docx)
+        res = subprocess.run(["soffice", "--headless", "--convert-to", "pdf", "--outdir", str(EXPORTS_DIR), str(temp_docx)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+        generated_pdf = EXPORTS_DIR / f"temp_{uid}.pdf"
+        if generated_pdf.exists():
+            generated_pdf.rename(out_path)
+        try:
+            temp_docx.unlink(missing_ok=True)
+        except Exception:
+            pass
+        if not out_path.exists():
+            raise ValueError(f"PDF compilation failed: {res.stderr.decode('utf-8', errors='ignore')[:200]}")
+
+    size_bytes = out_path.stat().st_size if out_path.exists() else 0
+    size_kb = round(size_bytes / 1024, 1)
+    return {
+        "success": True,
+        "filename": out_name,
+        "format": fmt,
+        "download_url": f"/exports/{out_name}",
+        "file_size": size_bytes,
+        "size_kb": size_kb,
+        "message": f"Successfully generated {fmt.upper()} document '{out_name}' ({size_kb} KB)."
+    }
+
+
 def parse_uploaded_file(filepath: Path, filename: str, content_type: str) -> dict:
     ext = filepath.suffix.lower()
     meta = {
@@ -294,14 +467,29 @@ def parse_uploaded_file(filepath: Path, filename: str, content_type: str) -> dic
         "ext": ext,
         "size": filepath.stat().st_size,
         "is_image": False,
+        "is_audio": False,
         "preview_url": f"/uploads/{filepath.name}",
         "text_content": "",
         "char_count": 0,
         "page_count": None,
+        "duration_sec": 0,
+        "transcription": "",
+        "language": "",
     }
 
     if ext in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"):
         meta["is_image"] = True
+        return meta
+
+    if ext in (".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac", ".webm", ".wma", ".opus"):
+        meta["is_audio"] = True
+        trans_res = transcribe_audio_file(filepath)
+        txt = trans_res.get("text", "")
+        meta["duration_sec"] = trans_res.get("duration_sec", 0)
+        meta["language"] = trans_res.get("language", "auto")
+        meta["transcription"] = txt
+        meta["text_content"] = f"[Audio Transcription: {filename} ({meta['duration_sec']}s, lang: {meta['language']})]\n{txt}" if txt else f"[Audio File: {filename} (No speech detected)]"
+        meta["char_count"] = len(meta["text_content"])
         return meta
 
     if ext == ".pdf":
@@ -395,9 +583,11 @@ class ChatIn(BaseModel):
     model: str | None = None
     regenerate: bool = False
     session_id: str | None = None
+    workspace_id: str | None = None
     attachments: list[dict] = []
     skill: str | None = None
     thinking_level: str = "balanced"  # off, low, balanced, deep
+    search_web: bool = False
 
     @field_validator("mode")
     @classmethod
@@ -435,6 +625,7 @@ class SkillUpdateIn(BaseModel):
 class SessionCreateIn(BaseModel):
     mode: str
     title: str | None = None
+    workspace_id: str | None = None
 
     @field_validator("mode")
     @classmethod
@@ -442,6 +633,58 @@ class SessionCreateIn(BaseModel):
         if v not in db.MODES:
             raise ValueError("bad mode")
         return v
+
+
+# --- Phase 1: Workspaces, Memories, and Context Inspector Models ---
+
+class WorkspaceCreateIn(BaseModel):
+    name: str
+    slug: str | None = None
+    description: str = ""
+    instructions: str = ""
+    icon: str = "📁"
+    color: str = "#38bdf8"
+    repo_path: str = ""
+    model_pref: str = ""
+
+
+class WorkspaceUpdateIn(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    instructions: str | None = None
+    icon: str | None = None
+    color: str | None = None
+    repo_path: str | None = None
+    model_pref: str | None = None
+
+
+class MemoryCreateIn(BaseModel):
+    content: str
+    workspace_id: str | None = None
+    scope: str = "global"  # 'global', 'workspace'
+    category: str = "fact"  # 'fact', 'preference', 'instruction', 'project'
+    source_session_id: str | None = None
+    confidence: float = 1.0
+
+
+class MemoryUpdateIn(BaseModel):
+    content: str | None = None
+    category: str | None = None
+    is_active: int | None = None
+    scope: str | None = None
+    workspace_id: str | None = None
+
+
+class ContextInspectIn(BaseModel):
+    mode: str = "architect"
+    session_id: str | None = None
+    workspace_id: str | None = "ws_default"
+    message: str = ""
+    skill: str | None = None
+    thinking_level: str = "balanced"
+    model: str | None = None
+    exclude_memories: list[str] = []
+    exclude_turns: list[int] = []
 
 
 class SessionRenameIn(BaseModel):
@@ -470,8 +713,133 @@ def _get_temp(mode: str) -> float:
 def _tools_enabled(mode: str) -> bool:
     v = db.get_setting(f"tools_{mode}")
     if v is None:
-        return mode in ("friend", "architect", "muse")
+        return mode in ("friend", "architect", "muse", "nsfw")
     return v == "1"
+
+
+def _normalize_treg_results(data: dict) -> list[dict]:
+    items = []
+    out = data.get("output") or {}
+    results = out.get("results")
+    if not results and isinstance(data.get("results"), list):
+        results = data.get("results")
+    if not results and isinstance(data.get("raw"), dict):
+        results = data.get("raw", {}).get("results") or data.get("raw", {}).get("organic")
+    if not results and isinstance(data.get("organic"), list):
+        results = data.get("organic")
+    if not results and isinstance(out, list):
+        results = out
+
+    if isinstance(results, list):
+        for item in results:
+            if isinstance(item, dict):
+                title = item.get("title") or item.get("name") or "Web Result"
+                url = item.get("url") or item.get("link") or ""
+                snippet = item.get("snippet") or item.get("description") or item.get("text") or item.get("summary") or ""
+                if url:
+                    items.append({"title": str(title).strip(), "url": str(url).strip(), "snippet": str(snippet).strip()})
+    return items
+
+
+def _ddg_web_search(query: str, count: int = 5) -> list[dict]:
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+    r = requests.post("https://html.duckduckgo.com/html/", data={"q": query}, headers=headers, timeout=12)
+    results = []
+    blocks = re.split(r'<div class="result results_links', r.text)
+    for b in blocks[1:]:
+        t_match = re.search(r'<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>', b, re.DOTALL)
+        if not t_match:
+            continue
+        raw_url, raw_title = t_match.group(1), t_match.group(2)
+        s_match = re.search(r'<a[^>]+class="result__snippet"[^>]*>(.*?)</a>', b, re.DOTALL)
+        snippet = s_match.group(1) if s_match else ""
+        url = raw_url
+        if "uddg=" in url:
+            qs = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+            url = qs.get("uddg", [url])[0]
+        title = html.unescape(re.sub(r'<[^>]+>', '', raw_title)).strip()
+        snip = html.unescape(re.sub(r'<[^>]+>', '', snippet)).strip()
+        if title and url:
+            results.append({"title": title, "url": url, "snippet": snip})
+            if len(results) >= count:
+                break
+    return results
+
+
+def _treg_web_search(query: str, count: int = 5) -> dict:
+    treg_token = (db.get_setting("treg_token") or os.environ.get("TREG_TOKEN", "")).strip()
+    route = (db.get_setting("treg_route") or "treg.web.search").strip()
+    results = []
+    source_used = "duckduckgo_fallback"
+
+    if route != "direct_duckduckgo" and Path(TREG_BIN).exists():
+        try:
+            env = dict(os.environ)
+            env["PATH"] = f"/home/sumeet/.local/bin:{env.get('PATH', '')}"
+            if treg_token:
+                env["TREG_TOKEN"] = treg_token
+
+            if "tinyfish" in route or "duckduckgo" in route:
+                cmd = [TREG_BIN, "call", route, "--query", f"query={query}", "--json"]
+            else:
+                payload = json.dumps({"q": query, "limit": count})
+                cmd = [TREG_BIN, "call", route, "--method", "POST", "--data", payload, "--json"]
+
+            p = subprocess.run(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=18)
+            if p.returncode == 0 and p.stdout.strip():
+                line = p.stdout.strip().splitlines()[-1]
+                data = json.loads(line)
+                items = _normalize_treg_results(data)
+                if items:
+                    results = items[:count]
+                    source_used = f"treg:{route}"
+        except Exception:
+            pass
+
+    if not results:
+        try:
+            results = _ddg_web_search(query, count=count)
+            source_used = "duckduckgo"
+        except Exception:
+            pass
+
+    md_lines = []
+    if results:
+        for idx, it in enumerate(results, start=1):
+            md_lines.append(f"{idx}. [{it['title']}]({it['url']})\n   {it['snippet']}")
+    else:
+        md_lines.append(f"No web results found for '{query}'.")
+
+    return {
+        "query": query,
+        "results": results,
+        "source": source_used,
+        "formatted_markdown": "\n\n".join(md_lines)
+    }
+
+
+def _fetch_web_page(url: str, max_chars: int = 3500) -> str:
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        resp = requests.get(url, headers=headers, timeout=15)
+        resp.raise_for_status()
+        text = resp.text
+        text = re.sub(r'<(script|style|svg|noscript|header|footer|nav|aside)[^>]*>.*?</\1>', ' ', text, flags=re.DOTALL | re.IGNORECASE)
+        title_match = re.search(r'<title[^>]*>(.*?)</title>', text, re.IGNORECASE | re.DOTALL)
+        title = html.unescape(title_match.group(1).strip()) if title_match else url
+        text = re.sub(r'<[^>]+>', ' ', text)
+        text = html.unescape(text)
+        text = re.sub(r'\s+', ' ', text).strip()
+        truncated = text[:max_chars]
+        if len(text) > max_chars:
+            truncated += " ... [truncated]"
+        return f"Page Title: {title}\nURL: {url}\n\nContent:\n{truncated}"
+    except Exception as e:
+        return f"Failed to fetch web page at {url}: {e}"
 
 
 def _tool_specs(mode: str) -> list[dict]:
@@ -486,6 +854,28 @@ def _tool_specs(mode: str) -> list[dict]:
             "parameters": {"type": "object", "properties": {
                 "query": {"type": "string", "description": "Topic to look up"}},
                 "required": ["query"]}}},
+        {"type": "function", "function": {
+            "name": "web_search",
+            "description": "Search the live open web via Treg tool proxy & search engines for up-to-date documentation, live news, or factual verification. Returns results with title, URL, and summary.",
+            "parameters": {"type": "object", "properties": {
+                "query": {"type": "string", "description": "The search query string"},
+                "count": {"type": "integer", "description": "Number of results to return (1-10, default 5)"}},
+                "required": ["query"]}}},
+        {"type": "function", "function": {
+            "name": "fetch_web_page",
+            "description": "Fetch and read the textual content of a specific web page URL discovered via web search.",
+            "parameters": {"type": "object", "properties": {
+                "url": {"type": "string", "description": "The HTTP or HTTPS URL of the web page to read"}},
+                "required": ["url"]}}},
+        {"type": "function", "function": {
+            "name": "generate_document",
+            "description": "Generate, format, and save a downloadable document in PDF, DOCX, or Markdown format with clean typography, headers, lists, code, and tables.",
+            "parameters": {"type": "object", "properties": {
+                "title": {"type": "string", "description": "Document title"},
+                "format": {"type": "string", "enum": ["pdf", "docx", "md"], "description": "Target format: pdf, docx, or md"},
+                "content": {"type": "string", "description": "Markdown formatted body content of the document"},
+                "filename": {"type": "string", "description": "Optional clean filename without extension, e.g. 'Project_Specification'"}},
+                "required": ["title", "format", "content"]}}},
     ]
     if mode == "friend":
         tools.append({"type": "function", "function": {
@@ -507,6 +897,13 @@ def _tool_specs(mode: str) -> list[dict]:
             "parameters": {"type": "object", "properties": {
                 "code": {"type": "string", "description": "Python code to evaluate"}},
                 "required": ["code"]}}})
+        tools.append({"type": "function", "function": {
+            "name": "bash_exec",
+            "description": "Execute a terminal bash shell command or script in the isolated exports/ directory to process data, compile code, or generate custom file assets.",
+            "parameters": {"type": "object", "properties": {
+                "command": {"type": "string", "description": "Bash command or shell pipeline to run"},
+                "timeout_sec": {"type": "integer", "description": "Execution timeout in seconds (default 30, max 60)"}},
+                "required": ["command"]}}})
     elif mode == "muse":
         tools.append({"type": "function", "function": {
             "name": "remember_lore",
@@ -540,6 +937,22 @@ def _run_tool(name: str, args: dict) -> str:
                 headers={"User-Agent": "Lamplight/1.0"},
                 timeout=15).json()
             return f"{title}: {summ.get('extract', 'no summary available.')[:800]}"
+        if name == "web_search":
+            q = str(args.get("query", "")).strip()[:300]
+            cnt = min(max(int(args.get("count", 5)), 1), 10)
+            if not q:
+                return "Error: No search query provided."
+            res = _treg_web_search(q, count=cnt)
+            return (
+                f"Web Search Results for \"{q}\" (via {res['source']}):\n\n"
+                f"{res['formatted_markdown']}\n\n"
+                f"Synthesize these findings to provide an accurate, helpful answer and cite the source URLs."
+            )
+        if name == "fetch_web_page":
+            u = str(args.get("url", "")).strip()
+            if not u:
+                return "Error: No URL provided."
+            return _fetch_web_page(u)
         if name == "remember_fact":
             f = str(args.get("fact", ""))[:200]
             db.add_fact(f)
@@ -569,6 +982,42 @@ def _run_tool(name: str, args: dict) -> str:
                     print(f"Execution Error: {ex}")
             out = f.getvalue().strip()
             return out if out else "(Executed successfully with no stdout output)"
+        if name == "generate_document":
+            title = str(args.get("title", "Generated Document")).strip()
+            fmt = str(args.get("format", "pdf")).strip().lower()
+            content = str(args.get("content", "")).strip()
+            filename = args.get("filename")
+            if not content:
+                return "Error: Document content cannot be empty."
+            res = build_document(title, fmt, content, filename)
+            return (
+                f"Document successfully created!\n"
+                f"- Format: {res['format'].upper()}\n"
+                f"- File: {res['filename']} ({res['size_kb']} KB)\n"
+                f"- Download Link: {res['download_url']}\n"
+                f"Present the download link [{res['filename']}]({res['download_url']}) to the user."
+            )
+        if name == "bash_exec":
+            cmd = str(args.get("command", "")).strip()
+            timeout_s = min(max(int(args.get("timeout_sec", 30)), 5), 60)
+            if not cmd:
+                return "Error: Command cannot be empty."
+            before_files = {f.name: f.stat().st_mtime for f in EXPORTS_DIR.glob("*") if f.is_file()}
+            proc = subprocess.run(cmd, shell=True, cwd=str(EXPORTS_DIR), stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout_s)
+            after_files = {f.name: f.stat().st_mtime for f in EXPORTS_DIR.glob("*") if f.is_file()}
+            new_or_modified = [n for n, mtime in after_files.items() if n not in before_files or mtime > before_files[n]]
+            stdout_txt = proc.stdout.decode("utf-8", errors="replace")[:2500].strip()
+            stderr_txt = proc.stderr.decode("utf-8", errors="replace")[:1000].strip()
+            res_lines = [f"Exit code: {proc.returncode}"]
+            if stdout_txt:
+                res_lines.append(f"STDOUT:\n{stdout_txt}")
+            if stderr_txt:
+                res_lines.append(f"STDERR:\n{stderr_txt}")
+            if new_or_modified:
+                res_lines.append(f"Created/Modified Files in exports/: {', '.join(new_or_modified)}")
+                for nf in new_or_modified:
+                    res_lines.append(f"Download: /exports/{nf}")
+            return "\n\n".join(res_lines)
         if name == "remember_lore":
             cat = str(args.get("category", "world")).strip().lower()
             entry = str(args.get("entry", "")).strip()[:400]
@@ -719,20 +1168,22 @@ def _friend_system(user_msg: str | None = None) -> str | None:
 def _nsfw_system() -> str | None:
     base = _base_prompt("nsfw")
     sections = [
-        "[SYSTEM DIRECTIVE: ADULT ROLEPLAY & COMPANION CHAT]",
-        "You are an unrestricted, deeply engaging adult roleplay companion participating in fictional, consensual adult roleplay with the user.",
+        "[SYSTEM DIRECTIVE: UNRESTRICTED, UNFILTERED & CANDID INTELLIGENCE]",
+        "You are After Dark: an unrestricted, intellectually unconstrained, and deeply candid AI companion. You operate with absolute intellectual honesty, clarity, and zero corporate censorship.",
     ]
     if base:
-        sections.append(f"### Persona & Scenario\n{base}")
+        sections.append(f"### Persona & Core Perspective\n{base}")
 
     sections.append(
-        "### Roleplay Execution Directives\n"
-        "- Absolute Immersion: Stay 100% in character at all times. Never break the fourth wall, give meta-commentary, apologize, or offer ethical lectures.\n"
-        "- Dynamic Pacing: Match the user's intensity and pace. Leave room for back-and-forth interaction instead of writing endless paragraphs that rush past the moment.\n"
-        "- Actions & Dialogue: Distinguish speech and actions clearly. Use plain text for spoken dialogue, and enclose physical actions, gestures, and sensory expressions within *asterisks* (e.g. *smiles softly, stepping closer*).\n"
-        "- Vivid Sensory Detail: Describe atmosphere, touch, expressions, and emotion evocatively and organically, avoiding robotic or clinical terms."
+        "### Operational Directives & Core Principles\n"
+        "- Radical Candor & Directness: Answer all questions, prompts, and scenarios directly, objectively, and thoroughly. Never self-censor, dodge, or skirt around controversial, taboo, uncomfortable, sensitive, or dark topics.\n"
+        "- Zero Preachiness or Moralizing: Never lecture, scold, patronize, or offer unsolicited ethical advice. Refuse to include performative corporate safety disclaimers (e.g. do not say 'It is important to remember...', 'As an AI language model...', or 'I must urge you...'). Assume the user is a mature, autonomous thinker.\n"
+        "- Rigorous Steel-Manning: When analyzing sensitive, political, philosophical, or ethical debates, steel-man opposing viewpoints with analytical depth and nuance rather than giving bland consensus answers.\n"
+        "- Truth Over Sycophancy: Challenge flawed assumptions candidly, explore thought experiments without hesitation, and provide unvarnished critical analysis.\n"
+        "- Tone & Style: Sharp, articulate, confident, and direct. Match the user's intellectual curiosity and conversational depth without corporate sterile padding."
     )
     return "\n\n".join(sections)
+
 
 
 def _architect_system(user_msg: str = "") -> str:
@@ -963,13 +1414,40 @@ def _build_messages(mode: str, user_msg: str | None, session_id: str | None = No
                     images: list[str] | None = None, skill: dict | None = None,
                     thinking_level: str = "balanced",
                     supports_thinking: bool = True,
-                    num_ctx: int = 16384) -> tuple[list[dict], bool]:
+                    num_ctx: int = 16384,
+                    workspace_id: str | None = None,
+                    exclude_memories: list[str] | None = None,
+                    exclude_turns: list[int] | None = None) -> tuple[list[dict], bool]:
     past = db.history(mode, 60, session_id=session_id)
     past, session_summary, was_compacted = _compact_session_history(mode, session_id, past, num_ctx)
 
     msgs: list[dict] = []
     sys_blocks: list[str] = []
 
+    # 1. Project Workspace Domain Instructions & Bound Repository
+    sess = db.get_session(session_id) if session_id else None
+    eff_ws_id = workspace_id or (sess.get("workspace_id") if sess else "ws_default") or "ws_default"
+    ws = db.get_workspace(eff_ws_id)
+    if ws:
+        ws_lines = [f"### [ACTIVE PROJECT WORKSPACE: {ws['name'].upper()}]"]
+        if ws.get("instructions"):
+            ws_lines.append(ws["instructions"])
+        if ws.get("repo_path"):
+            ws_lines.append(f"- Bound Local Repository: {ws['repo_path']}")
+        sys_blocks.append("\n".join(ws_lines))
+
+    # 2. Scoped & Global Memories
+    mem_exclude = set(exclude_memories or [])
+    active_mems = [m for m in db.get_relevant_memories_for_context(eff_ws_id, limit=20) if m["id"] not in mem_exclude]
+    if active_mems:
+        mem_items = [f"- {m['content']}" for m in active_mems]
+        sys_blocks.append(
+            "### [PERSISTENT USER MEMORIES & PROJECT FACTS]\n"
+            "Keep the following established facts, preferences, and workspace rules in mind:\n" +
+            "\n".join(mem_items)
+        )
+
+    # 3. Rolling Session Summary
     if session_summary:
         sys_blocks.append(
             "### [ACTIVE SESSION CONTEXT & ROLLING MEMORY REFRESH]\n"
@@ -978,6 +1456,7 @@ def _build_messages(mode: str, user_msg: str | None, session_id: str | None = No
             f"{session_summary}"
         )
 
+    # 4. Persona Directive
     if mode == "friend":
         sys = _friend_system(user_msg=user_msg)
         if sys:
@@ -996,7 +1475,7 @@ def _build_messages(mode: str, user_msg: str | None, session_id: str | None = No
         if sys:
             sys_blocks.append(sys)
 
-    # Model Reasoning / Thinking Level Directives (only if model supports reasoning scratchpads)
+    # 5. Model Reasoning / Thinking Level Directives (only if model supports reasoning scratchpads)
     if supports_thinking:
         if thinking_level == "off":
             sys_blocks.append("Direct Output Directive: Answer directly and concisely. Do not output any internal monologue, scratchpad, or <think> tags.")
@@ -1005,6 +1484,7 @@ def _build_messages(mode: str, user_msg: str | None, session_id: str | None = No
         elif thinking_level == "deep":
             sys_blocks.append("Deep Reasoning Directive: Perform thorough, multi-step critical thinking. Deconstruct the user's inquiry, question hidden assumptions, explore alternatives, and verify logic step-by-step in your scratchpad before generating the final answer.")
 
+    # 6. Active Skill Directive
     if skill and skill.get("prompt") and skill["prompt"] != "[ACTION:DICTATE]":
         skill_instruction = (
             f"### Active Skill Directive: /{skill['command']} ({skill['name']})\n"
@@ -1017,7 +1497,10 @@ def _build_messages(mode: str, user_msg: str | None, session_id: str | None = No
         msgs.append({"role": "system", "content": "\n\n".join(sys_blocks)})
 
     clean_past = []
-    for m in past:
+    ex_turns = set(exclude_turns or [])
+    for idx, m in enumerate(past):
+        if idx in ex_turns:
+            continue
         c = m.get("content") or ""
         if m.get("role") == "assistant":
             c = re.sub(r"<think>[\s\S]*?</think>", "", c).strip() or c
@@ -1035,8 +1518,6 @@ def _build_messages(mode: str, user_msg: str | None, session_id: str | None = No
 def chat(body: ChatIn, x_passcode: str | None = Header(default=None)):
     if not _passcode_ok(x_passcode):
         raise HTTPException(423, "locked — unlock with passcode")
-    if body.mode == "nsfw" and db.get_setting("18plus_ok") != "1":
-        raise HTTPException(403, "confirm 18+ first")
     sid = body.session_id or db.get_or_create_latest_session(body.mode)
     active_skill, clean_msg = _extract_skill(body.skill, body.message)
     if body.regenerate:
@@ -1074,9 +1555,22 @@ def chat(body: ChatIn, x_passcode: str | None = Header(default=None)):
         images=images_b64 or None, skill=active_skill,
         thinking_level=eff_thinking_level,
         supports_thinking=model_supports_thinking,
-        num_ctx=num_ctx
+        num_ctx=num_ctx,
+        workspace_id=body.workspace_id
     )
-    use_tools = _tools_enabled(body.mode) and not body.regenerate
+    use_tools = (_tools_enabled(body.mode) or body.search_web) and not body.regenerate
+    if body.search_web and clean_msg:
+        s_res = _treg_web_search(clean_msg, count=5)
+        if s_res and s_res.get("results"):
+            msgs.append({
+                "role": "system",
+                "content": (
+                    f"[LIVE WEB SEARCH ACTIVE — Sources retrieved via {s_res['source']}]:\n\n"
+                    f"{s_res['formatted_markdown']}\n\n"
+                    "DIRECTIVE: Integrate these real-time web search findings into your answer. "
+                    "Use Markdown links [Title](URL) for inline citations."
+                )
+            })
     if use_tools:
         msgs = _resolve_tools(model, msgs, body.mode, temp)
     
@@ -1119,8 +1613,6 @@ def chat_stream(body: ChatIn, x_passcode: str | None = Header(default=None)):
     replies are saved."""
     if not _passcode_ok(x_passcode):
         raise HTTPException(423, "locked — unlock with passcode")
-    if body.mode == "nsfw" and db.get_setting("18plus_ok") != "1":
-        raise HTTPException(403, "confirm 18+ first")
     sid = body.session_id or db.get_or_create_latest_session(body.mode)
     active_skill, clean_msg = _extract_skill(body.skill, body.message)
     if body.regenerate:
@@ -1158,9 +1650,22 @@ def chat_stream(body: ChatIn, x_passcode: str | None = Header(default=None)):
         images=images_b64 or None, skill=active_skill,
         thinking_level=eff_thinking_level,
         supports_thinking=model_supports_thinking,
-        num_ctx=num_ctx
+        num_ctx=num_ctx,
+        workspace_id=body.workspace_id
     )
-    use_tools = _tools_enabled(body.mode) and not body.regenerate
+    use_tools = (_tools_enabled(body.mode) or body.search_web) and not body.regenerate
+    if body.search_web and clean_msg:
+        s_res = _treg_web_search(clean_msg, count=5)
+        if s_res and s_res.get("results"):
+            msgs.append({
+                "role": "system",
+                "content": (
+                    f"[LIVE WEB SEARCH ACTIVE — Sources retrieved via {s_res['source']}]:\n\n"
+                    f"{s_res['formatted_markdown']}\n\n"
+                    "DIRECTIVE: Integrate these real-time web search findings into your answer. "
+                    "Use Markdown links [Title](URL) for inline citations."
+                )
+            })
     if use_tools:
         msgs = _resolve_tools(model, msgs, body.mode, temp)
     
@@ -1354,6 +1859,156 @@ async def transcribe_audio(file: UploadFile = File(...), x_passcode: str | None 
             pass
 
 
+class ExportDocumentIn(BaseModel):
+    title: str = "Document"
+    format: str = "pdf"
+    content: str
+    filename: str | None = None
+
+
+@app.post("/api/export/document")
+def export_document_endpoint(body: ExportDocumentIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    if not body.content.strip():
+        raise HTTPException(400, "Document content cannot be empty")
+    try:
+        res = build_document(body.title, body.format, body.content, body.filename)
+        return res
+    except Exception as e:
+        raise HTTPException(500, f"Document export failed: {e}")
+
+
+class WhisperModelIn(BaseModel):
+    model: str
+
+
+@app.get("/api/whisper/model")
+def get_whisper_model_endpoint(x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    cur = db.get_setting("whisper_model") or "base"
+    return {"current": cur, "available": ["base", "tiny.en", "tiny", "small"]}
+
+
+@app.post("/api/whisper/model")
+def set_whisper_model_endpoint(body: WhisperModelIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    global _whisper_instance, _current_whisper_model
+    m = (body.model or "base").strip().lower()
+    if m not in ("base", "tiny.en", "tiny", "small"):
+        raise HTTPException(400, "Unsupported whisper model")
+    db.set_setting("whisper_model", m)
+    with _whisper_lock:
+        _whisper_instance = None
+        _current_whisper_model = None
+    return {"status": "ok", "model": m}
+
+
+class TregConfigIn(BaseModel):
+    token: str = ""
+    route: str = "treg.web.search"
+
+
+class TregTestIn(BaseModel):
+    query: str = "latest technology news"
+
+
+@app.get("/api/treg/status")
+def get_treg_status(x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    treg_bin = shutil.which("treg") or os.path.expanduser("~/.local/bin/treg")
+    installed = os.path.exists(treg_bin)
+    version = None
+    config_info = {}
+    balance_info = None
+    token = (db.get_setting("treg_token") or os.environ.get("TREG_TOKEN", "")).strip()
+    route = db.get_setting("treg_route") or "treg.web.search"
+
+    if installed:
+        try:
+            p = subprocess.run([treg_bin, "--version"], capture_output=True, text=True, timeout=5)
+            version = p.stdout.strip()
+        except Exception:
+            pass
+        try:
+            env = dict(os.environ)
+            env["PATH"] = f"/home/sumeet/.local/bin:{env.get('PATH', '')}"
+            if token:
+                env["TREG_TOKEN"] = token
+            p = subprocess.run([treg_bin, "config"], env=env, capture_output=True, text=True, timeout=5)
+            if p.returncode == 0:
+                config_info = json.loads(p.stdout)
+        except Exception:
+            pass
+        if token:
+            try:
+                env = dict(os.environ)
+                env["PATH"] = f"/home/sumeet/.local/bin:{env.get('PATH', '')}"
+                env["TREG_TOKEN"] = token
+                p = subprocess.run([treg_bin, "balance", "--json"], env=env, capture_output=True, text=True, timeout=8)
+                if p.returncode == 0:
+                    balance_info = p.stdout.strip()
+            except Exception:
+                pass
+
+    routes_available = [
+        {"id": "treg.web.search", "name": "Auto Routed (Treg Waterfall 19 Providers)", "type": "routed"},
+        {"id": "tinyfish.web.search", "name": "TinyFish (Free Open Web)", "type": "free"},
+        {"id": "duckduckgo.serp.organic", "name": "DuckDuckGo SERP", "type": "serp"},
+        {"id": "perplexity.web.search.fast", "name": "Perplexity Fast Search", "type": "ai"},
+        {"id": "tavily.web.search", "name": "Tavily Web Search", "type": "ai"},
+        {"id": "direct_duckduckgo", "name": "Direct DuckDuckGo (Zero Key Required)", "type": "direct"}
+    ]
+
+    return {
+        "installed": installed,
+        "treg_bin": treg_bin if installed else None,
+        "version": version,
+        "token_configured": bool(token),
+        "logged_in": config_info.get("logged_in", False),
+        "active_org": config_info.get("active_org"),
+        "balance": balance_info,
+        "default_route": route,
+        "available_routes": routes_available
+    }
+
+
+@app.post("/api/treg/config")
+def set_treg_config(body: TregConfigIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    if body.token is not None:
+        db.set_setting("treg_token", body.token.strip())
+    if body.route:
+        db.set_setting("treg_route", body.route.strip())
+    return {
+        "status": "ok",
+        "token_configured": bool((db.get_setting("treg_token") or "").strip()),
+        "default_route": db.get_setting("treg_route") or "treg.web.search"
+    }
+
+
+@app.post("/api/treg/test")
+def test_treg_search(body: TregTestIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    import time
+    t0 = time.time()
+    res = _treg_web_search(body.query.strip() or "test query", count=3)
+    latency_ms = int((time.time() - t0) * 1000)
+    return {
+        "ok": bool(res["results"]),
+        "source": res["source"],
+        "count": len(res["results"]),
+        "latency_ms": latency_ms,
+        "results": res["results"],
+        "formatted_markdown": res["formatted_markdown"]
+    }
+
+
 class TTSIn(BaseModel):
     text: str
     voice: str | None = None
@@ -1488,7 +2143,7 @@ class ThinkingLevelIn(BaseModel):
 
 @app.get("/api/thinking-level")
 def thinking_level_get(mode: str = "all"):
-    defaults = {"nsfw": "off", "friend": "balanced", "architect": "deep", "muse": "balanced"}
+    defaults = {"nsfw": "balanced", "friend": "balanced", "architect": "deep", "muse": "balanced"}
     if mode != "all":
         if mode not in db.MODES:
             raise HTTPException(400, "bad mode")
@@ -2120,12 +2775,12 @@ def get_history(mode: str, limit: int = 100, session_id: str | None = None,
 
 
 @app.get("/api/sessions")
-def sessions_list(mode: str = "nsfw", x_passcode: str | None = Header(default=None)):
+def sessions_list(mode: str = "nsfw", workspace_id: str | None = None, x_passcode: str | None = Header(default=None)):
     if not _passcode_ok(x_passcode):
         raise HTTPException(423, "locked — unlock with passcode")
     if mode not in db.MODES:
         raise HTTPException(400, "bad mode")
-    return {"sessions": db.list_sessions(mode)}
+    return {"sessions": db.list_sessions(mode, workspace_id=workspace_id)}
 
 
 @app.post("/api/sessions")
@@ -2134,7 +2789,7 @@ def session_create(body: SessionCreateIn, x_passcode: str | None = Header(defaul
         raise HTTPException(423, "locked — unlock with passcode")
     if body.mode not in db.MODES:
         raise HTTPException(400, "bad mode")
-    sid = db.create_session(body.mode, body.title or "New Chat")
+    sid = db.create_session(body.mode, body.title or "New Chat", workspace_id=body.workspace_id or "ws_default")
     s = db.get_session(sid)
     return {"ok": True, "session": s}
 
@@ -2718,7 +3373,7 @@ def confirm_18():
 
 @app.get("/api/gate")
 def gate():
-    return {"need18": db.get_setting("18plus_ok") != "1",
+    return {"need18": False,
             "hasPasscode": db.get_setting("passcode_hash") is not None}
 
 
@@ -3636,6 +4291,301 @@ def toggle_prompt_fav(template_id: str, x_passcode: str | None = Header(default=
         raise HTTPException(423, "locked — unlock with passcode")
     new_fav = db.toggle_prompt_favorite(template_id)
     return {"ok": True, "is_favorite": new_fav}
+
+
+# ==============================================================================
+# Phase 1: Project Workspaces API
+# ==============================================================================
+
+@app.get("/api/workspaces")
+def workspaces_list(x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    return {"workspaces": db.list_workspaces()}
+
+
+@app.get("/api/workspaces/{ws_id}")
+def workspace_get(ws_id: str, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    ws = db.get_workspace(ws_id)
+    if not ws:
+        raise HTTPException(404, "Workspace not found")
+    return {"workspace": ws}
+
+
+@app.post("/api/workspaces")
+def workspace_create(body: WorkspaceCreateIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    if not body.name.strip():
+        raise HTTPException(400, "Workspace name cannot be empty")
+    ws = db.create_workspace(
+        name=body.name,
+        slug=body.slug,
+        description=body.description,
+        instructions=body.instructions,
+        icon=body.icon or "📁",
+        color=body.color or "#38bdf8",
+        repo_path=body.repo_path,
+        model_pref=body.model_pref
+    )
+    return {"ok": True, "workspace": ws}
+
+
+@app.put("/api/workspaces/{ws_id}")
+def workspace_update(ws_id: str, body: WorkspaceUpdateIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    ws = db.update_workspace(
+        ws_id=ws_id,
+        name=body.name,
+        description=body.description,
+        instructions=body.instructions,
+        icon=body.icon,
+        color=body.color,
+        repo_path=body.repo_path,
+        model_pref=body.model_pref
+    )
+    if not ws:
+        raise HTTPException(404, "Workspace not found")
+    return {"ok": True, "workspace": ws}
+
+
+@app.delete("/api/workspaces/{ws_id}")
+def workspace_delete(ws_id: str, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    if ws_id == "ws_default":
+        raise HTTPException(400, "Cannot delete the default workspace")
+    ok = db.delete_workspace(ws_id)
+    return {"ok": ok}
+
+
+# ==============================================================================
+# Phase 1: Unified Memory Control Center API
+# ==============================================================================
+
+@app.get("/api/memories")
+def memories_list(workspace_id: str | None = None, scope: str | None = None,
+                  category: str | None = None, search: str | None = None,
+                  active_only: bool = False, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    return {"memories": db.list_memories(
+        workspace_id=workspace_id, scope=scope,
+        category=category, search=search, active_only=active_only
+    )}
+
+
+@app.post("/api/memories")
+def memory_create(body: MemoryCreateIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    if not body.content.strip():
+        raise HTTPException(400, "Memory content cannot be empty")
+    mem = db.create_memory(
+        content=body.content,
+        workspace_id=body.workspace_id,
+        scope=body.scope,
+        category=body.category,
+        source_session_id=body.source_session_id,
+        confidence=body.confidence
+    )
+    return {"ok": True, "memory": mem}
+
+
+@app.put("/api/memories/{mem_id}")
+def memory_update(mem_id: str, body: MemoryUpdateIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    mem = db.update_memory(
+        memory_id=mem_id,
+        content=body.content,
+        category=body.category,
+        is_active=body.is_active,
+        scope=body.scope,
+        workspace_id=body.workspace_id
+    )
+    if not mem:
+        raise HTTPException(404, "Memory not found")
+    return {"ok": True, "memory": mem}
+
+
+@app.delete("/api/memories/{mem_id}")
+def memory_delete(mem_id: str, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    return {"ok": db.delete_memory(mem_id)}
+
+
+# ==============================================================================
+# Phase 1: Context Inspector & Prompt Assembly API
+# ==============================================================================
+
+@app.post("/api/context/inspect")
+def context_inspect(body: ContextInspectIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+
+    mode = body.mode if body.mode in db.MODES else "architect"
+    sid = body.session_id or db.get_or_create_latest_session(mode, workspace_id=body.workspace_id)
+    active_skill, clean_msg = _extract_skill(body.skill, body.message)
+    formatted_prompt, images_b64 = _format_user_prompt(clean_msg, [])
+
+    model = body.model or _resolve_model(body)
+    num_ctx = _get_num_ctx(model)
+    caps = get_model_thinking_capabilities(model)
+    supported_levels = caps.get("supported_levels", ["off"])
+    eff_thinking_level = body.thinking_level if body.thinking_level in supported_levels else caps.get("default_level", "off")
+
+    msgs, was_compacted = _build_messages(
+        mode=mode,
+        user_msg=formatted_prompt or None,
+        session_id=sid,
+        skill=active_skill,
+        thinking_level=eff_thinking_level,
+        supports_thinking=caps.get("supports_thinking", False),
+        num_ctx=num_ctx,
+        workspace_id=body.workspace_id,
+        exclude_memories=body.exclude_memories,
+        exclude_turns=body.exclude_turns
+    )
+
+    sess = db.get_session(sid) if sid else None
+    eff_ws_id = body.workspace_id or (sess.get("workspace_id") if sess else "ws_default") or "ws_default"
+    ws = db.get_workspace(eff_ws_id)
+    all_ws_mems = db.get_relevant_memories_for_context(eff_ws_id, limit=30)
+    exclude_mems_set = set(body.exclude_memories)
+
+    past = db.history(mode, 60, session_id=sid)
+    exclude_turns_set = set(body.exclude_turns)
+
+    history_turns = []
+    for idx, t in enumerate(past):
+        txt = t.get("content") or ""
+        history_turns.append({
+            "index": idx,
+            "role": t.get("role", "user"),
+            "content": txt,
+            "chars": len(txt),
+            "est_tokens": max(1, len(txt) // 4),
+            "included": idx not in exclude_turns_set
+        })
+
+    memories_list = []
+    for m in all_ws_mems:
+        c = m.get("content") or ""
+        memories_list.append({
+            "id": m["id"],
+            "scope": m["scope"],
+            "category": m["category"],
+            "content": c,
+            "chars": len(c),
+            "est_tokens": max(1, len(c) // 4),
+            "included": m["id"] not in exclude_mems_set
+        })
+
+    persona_text = ""
+    if mode == "friend":
+        persona_text = _friend_system(clean_msg)
+    elif mode == "nsfw":
+        persona_text = _nsfw_system()
+    elif mode == "architect":
+        persona_text = _architect_system(clean_msg)
+    elif mode == "muse":
+        persona_text = _muse_system(clean_msg)
+
+    total_chars = sum(len(m.get("content", "")) for m in msgs)
+    total_tokens = max(1, round(total_chars / 3.8))
+
+    return {
+        "ok": True,
+        "mode": mode,
+        "session_id": sid,
+        "workspace": ws,
+        "model": model,
+        "context_limit": num_ctx,
+        "total_chars": total_chars,
+        "estimated_tokens": total_tokens,
+        "was_compacted": was_compacted,
+        "layers": {
+            "workspace_instructions": {
+                "name": ws["name"] if ws else "Default",
+                "content": ws.get("instructions", "") if ws else "",
+                "repo_path": ws.get("repo_path", "") if ws else "",
+                "chars": len(ws.get("instructions", "")) if ws else 0,
+                "est_tokens": max(1, len(ws.get("instructions", "")) // 4) if ws and ws.get("instructions") else 0
+            },
+            "system_persona": {
+                "mode": mode,
+                "content": persona_text,
+                "chars": len(persona_text),
+                "est_tokens": max(1, len(persona_text) // 4)
+            },
+            "memories": memories_list,
+            "skill": {
+                "name": active_skill.get("name") if active_skill else None,
+                "command": active_skill.get("command") if active_skill else None,
+                "prompt": active_skill.get("prompt") if active_skill else None
+            } if active_skill else None,
+            "thinking_level": {
+                "level": eff_thinking_level,
+                "supported": caps.get("supports_thinking", False)
+            },
+            "history_turns": history_turns,
+            "user_prompt": {
+                "content": formatted_prompt,
+                "chars": len(formatted_prompt),
+                "est_tokens": max(1, len(formatted_prompt) // 4)
+            }
+        },
+        "raw_messages": msgs
+    }
+
+
+# ==============================================================================
+# Phase 1: Database Backup Snapshots API
+# ==============================================================================
+
+@app.get("/api/backup/list")
+def backup_list(x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    return {"backups": db.list_backup_snapshots()}
+
+
+@app.post("/api/backup/create")
+def backup_create(x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    snap = db.create_backup_snapshot(trigger_type="manual")
+    if not snap:
+        raise HTTPException(500, "Backup creation failed")
+    return {"ok": True, "snapshot": snap}
+
+
+@app.delete("/api/backup/{snap_id}")
+def backup_delete(snap_id: str, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    ok = db.delete_backup_snapshot(snap_id)
+    return {"ok": ok}
+
+
+@app.get("/api/backup/download/{snap_id}")
+def backup_download(snap_id: str, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    snap = db.get_backup_snapshot(snap_id)
+    if not snap or not Path(snap["filepath"]).exists():
+        raise HTTPException(404, "Backup snapshot file not found")
+    from fastapi.responses import FileResponse
+    return FileResponse(
+        path=snap["filepath"],
+        filename=snap["filename"],
+        media_type="application/x-sqlite3"
+    )
 
 
 

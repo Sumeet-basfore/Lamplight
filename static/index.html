@@ -7,7 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Outfit:wght@300;400;500;600;700;800&family=Syne:wght@700;800&family=Silkscreen&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/style.css?v=4.5">
+<link rel="stylesheet" href="/static/style.css?v=5.1">
+<script src="/static/marked.min.js"></script>
 <script src="/static/mermaid.min.js"></script>
 </head>
 <body>
@@ -16,23 +17,8 @@
 <div class="ambient-orb orb-2"></div>
 <div class="glow" aria-hidden="true"></div>
 
-<div id="gate" class="veil hidden">
-  <div class="veil-card">
-    <div class="brand"><span class="flame"></span>Lamplight</div>
-    <h1>18+ only</h1>
-    <p>This shelf holds an uncensored local NSFW bot. Everything stays on this machine. Confirm you are 18 or older to step in.</p>
-    <button id="btn18" class="primary">I am 18+ — continue</button>
-  </div>
-</div>
-
 <div id="lock" class="veil hidden">
   <div class="veil-card lock-card glass-chassis">
-    <!-- Corner Hardware Micro-Bolts -->
-    <div class="bolt tl"></div>
-    <div class="bolt tr"></div>
-    <div class="bolt bl"></div>
-    <div class="bolt br"></div>
-
     <div class="lock-header">
       <div class="brand">
         <span class="flame"></span>
@@ -40,7 +26,7 @@
       </div>
       <div class="lock-status-badge">
         <span class="lock-badge-dot pulse"></span>
-        <span>SECURITY CHASSIS // ARMED</span>
+        <span>Hardware Security · Locked</span>
       </div>
     </div>
 
@@ -114,12 +100,6 @@
 
 <!-- Master Hardware Glass Enclosure -->
 <main id="app" class="glass-chassis hidden">
-  <!-- Corner Hardware Micro-Bolts -->
-  <div class="bolt tl"></div>
-  <div class="bolt tr"></div>
-  <div class="bolt bl"></div>
-  <div class="bolt br"></div>
-
   <!-- Top Smoked Glass Control Deck -->
   <header class="glass-top-deck">
     <div class="brand-stamp">
@@ -131,9 +111,30 @@
           </svg>
         </button>
         <span class="brand-name-text">LAMPLIGHT</span>
-        <span class="spec-badge">CYBER-GLASS</span>
+        <span class="spec-badge">v4.9</span>
       </div>
-      <span class="brand-caption" id="brandCaption">AIR-GAPPED NEURAL WORKSPACE // RTX 3050</span>
+      <span class="brand-caption" id="brandCaption">Air-Gapped Neural Workspace · RTX 3050</span>
+    </div>
+
+    <!-- Project Workspace Scoped Container Chip -->
+    <div class="workspace-pill-wrap" id="workspacePillWrap">
+      <button id="btnWorkspaceSelect" class="workspace-chip-btn" type="button" aria-haspopup="true" aria-expanded="false" title="Switch Project Workspace">
+        <span class="ws-chip-icon">📁</span>
+        <span class="ws-chip-label" id="activeWorkspaceLabel">Personal Sandbox</span>
+        <svg class="ws-chip-arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </button>
+      <div id="workspaceDropdown" class="workspace-dropdown-menu hidden" role="menu">
+        <div class="ws-menu-header">
+          <span>PROJECT WORKSPACES</span>
+          <button id="btnNewWorkspace" class="ws-action-link" type="button">+ New</button>
+        </div>
+        <div id="workspaceListItems" class="ws-list-items">
+          <!-- Dynamically populated -->
+        </div>
+        <div class="ws-menu-footer">
+          <button id="btnManageWorkspaces" class="ws-footer-btn" type="button">Manage Workspaces...</button>
+        </div>
+      </div>
     </div>
 
     <!-- Frosted Cyber LCD Telemetry Box -->
@@ -169,7 +170,7 @@
     <!-- Modern Tactile Glass Rocker Switch Bank -->
     <nav id="tabs" class="glass-rocker-bank" aria-label="Chat Mode">
       <span id="tabGlow" class="hidden"></span>
-      <button data-mode="nsfw" class="glass-rocker-btn on" title="Uncensored private chat">
+      <button data-mode="nsfw" class="glass-rocker-btn on" title="Unrestricted & candid intelligence (zero corporate filters or censorship)">
         <div class="diode-led"></div>
         <span>After Dark</span>
       </button>
@@ -283,6 +284,41 @@
                   <span class="wb-badge wb-badge-rose">VARIABLES</span>
                 </div>
                 <span>Reusable curated templates with dynamic variables</span>
+              </div>
+            </button>
+          </div>
+          <div class="workbench-dropdown-divider"></div>
+          <div class="workbench-dropdown-section">
+            <span class="workbench-dropdown-header">Context &amp; Safety</span>
+            <button class="workbench-menu-item" type="button" id="wbItemMemoryCenter">
+              <span class="wb-item-icon wb-icon-purple">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7Z"></path>
+                  <line x1="9" y1="21" x2="15" y2="21"></line>
+                </svg>
+              </span>
+              <div class="wb-item-info">
+                <div class="wb-item-title-row">
+                  <strong>Memory Control Center</strong>
+                  <span class="wb-badge wb-badge-purple">SCOPED</span>
+                </div>
+                <span>Curate global &amp; workspace memories</span>
+              </div>
+            </button>
+            <button class="workbench-menu-item" type="button" id="wbItemBackups">
+              <span class="wb-item-icon wb-icon-emerald">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+              </span>
+              <div class="wb-item-info">
+                <div class="wb-item-title-row">
+                  <strong>Database Backups</strong>
+                  <span class="wb-badge wb-badge-emerald">SQLITE</span>
+                </div>
+                <span>Atomic snapshots &amp; restore archives</span>
               </div>
             </button>
           </div>
@@ -458,8 +494,8 @@
             
             <div class="composer-toolbar">
               <div class="toolbar-left">
-                <input type="file" id="fileInput" multiple class="hidden" accept=".pdf,.docx,.doc,.txt,.md,.py,.js,.ts,.html,.css,.json,.csv,.xml,.sql,.c,.cpp,.h,.rs,.go,.java,.png,.jpg,.jpeg,.webp,.gif">
-                <button id="btnAttach" class="comp-btn" type="button" title="Attach document or image">
+                <input type="file" id="fileInput" multiple class="hidden" accept=".pdf,.docx,.doc,.txt,.md,.py,.js,.ts,.html,.css,.json,.csv,.xml,.sql,.c,.cpp,.h,.rs,.go,.java,.png,.jpg,.jpeg,.webp,.gif,.mp3,.wav,.m4a,.aac,.ogg,.flac,.webm,.wma,.opus,audio/*">
+                <button id="btnAttach" class="comp-btn" type="button" title="Attach document, audio recording, or image">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
                   </svg>
@@ -469,6 +505,15 @@
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                     <line x1="17" y1="4" x2="7" y2="20"></line>
                   </svg>
+                </button>
+
+                <button id="btnWebSearch" class="comp-btn comp-btn-web" type="button" title="Toggle Real-Time Web Search (Treg)" aria-pressed="false">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="2" y1="12" x2="22" y2="12"></line>
+                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                  </svg>
+                  <span class="web-active-pip"></span>
                 </button>
                 
                 <div class="model-picker-wrap" id="modelPickerWrap">
@@ -492,7 +537,7 @@
                     <div class="cartridge-popover-header">
                       <div class="popover-header-left">
                         <span class="popover-lcd-dot"></span>
-                        <span class="popover-title">NEURAL CORE MATRIX</span>
+                        <span class="popover-title">NEURAL MODELS</span>
                       </div>
                       <span class="popover-count-tag" id="cartridgeCountTag">0 AVAILABLE</span>
                     </div>
@@ -565,9 +610,14 @@
             </div>
 
             <div class="composer-micro-hud">
+              <button id="btnPromptContextInspect" class="hud-stat hud-context-pill" type="button" title="Live Context Inspector (Click to inspect prompt breakdown)">
+                <span class="hud-dot context-live-dot"></span>
+                <span id="hudTokenCount">~1.2k tok</span>
+                <span class="hud-context-lens">🔍</span>
+              </button>
               <span class="hud-stat" id="hudTokSpeed"><span class="hud-dot"></span> <span id="hudTokVal">42 tok/s</span></span>
               <span class="hud-stat" id="hudVram"><span id="hudVramVal">4.8GB VRAM</span></span>
-              <span class="hud-stat privacy-tag">AIR-GAPPED // ZERO TELEMETRY</span>
+              <span class="hud-stat privacy-tag">Air-Gapped · Zero Telemetry</span>
             </div>
           </div>
         </div>
@@ -592,6 +642,7 @@
           <div class="canvas-view-toggle">
             <button id="btnCanvasPreview" class="canvas-tab-btn on" type="button" title="Interactive Sandbox Preview">Preview</button>
             <button id="btnCanvasCode" class="canvas-tab-btn" type="button" title="View Source Code">Code</button>
+            <button id="btnCanvasContext" class="canvas-tab-btn" type="button" title="Inspect Prompt Context & Token Breakdown">Context</button>
           </div>
           <div class="canvas-viewport-toggle" title="Device preview viewport">
             <button id="btnViewportDesktop" class="canvas-viewport-btn on" type="button" title="Desktop Viewport (100%)">🖥️</button>
@@ -644,6 +695,27 @@
               <line x1="12" y1="15" x2="12" y2="3"></line>
             </svg>
           </button>
+          <div class="canvas-export-wrap" style="position:relative;display:inline-block;">
+            <button id="btnCanvasExportDoc" class="canvas-tool-btn" type="button" title="Export as PDF, Word, or Markdown document">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+              </svg>
+            </button>
+            <div id="canvasExportMenu" class="msg-export-menu hidden" style="right:0;left:auto;top:calc(100% + 6px);bottom:auto;">
+              <button type="button" data-fmt="pdf" class="msg-export-item canvas-export-opt">
+                <span class="wb-badge wb-badge-rose">PDF</span>
+                <span>Export as PDF</span>
+              </button>
+              <button type="button" data-fmt="docx" class="msg-export-item canvas-export-opt">
+                <span class="wb-badge wb-badge-cyan">DOCX</span>
+                <span>Export as Word</span>
+              </button>
+              <button type="button" data-fmt="md" class="msg-export-item canvas-export-opt">
+                <span class="wb-badge wb-badge-emerald">MD</span>
+                <span>Export as Markdown</span>
+              </button>
+            </div>
+          </div>
           <button id="btnCanvasExportZip" class="canvas-tool-btn" type="button" title="Export as ZIP project bundle">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
@@ -693,6 +765,39 @@
             <div class="canvas-editor-stage">
               <pre id="canvasCodeHighlight" class="canvas-highlight-layer" aria-hidden="true"><code id="canvasCodeHighlightInner"></code></pre>
               <textarea id="canvasCodeArea" class="canvas-code-area" spellcheck="false" placeholder="Write or paste HTML, CSS, JavaScript, SVG, Mermaid, or Markdown here…"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Context Inspector Pane -->
+        <div id="canvasContextView" class="canvas-view-pane hidden">
+          <div class="context-inspector-pane">
+            <div class="ci-summary-card">
+              <div class="ci-header-row">
+                <div class="ci-meta">
+                  <span class="ci-title">Live Context Window</span>
+                  <span class="ci-model-tag" id="ciModelTag">Default</span>
+                </div>
+                <div class="ci-actions">
+                  <button id="btnRefreshContext" class="ci-btn-refresh" type="button" title="Refresh Live Context">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                    <span>Refresh</span>
+                  </button>
+                </div>
+              </div>
+              <div class="ci-token-meter">
+                <div class="ci-meter-head">
+                  <span class="ci-tokens-used" id="ciTokensUsed">0 / 8,192 tokens</span>
+                  <span class="ci-percent" id="ciPercentUsed">0%</span>
+                </div>
+                <div class="ci-meter-track">
+                  <div class="ci-meter-fill" id="ciMeterFill" style="width: 0%;"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="ci-layers-list" id="ciLayersList">
+              <!-- Dynamically populated layer breakdown cards -->
             </div>
           </div>
         </div>
@@ -1217,93 +1322,337 @@
     </label>
   </div>
 
-  <h4>After Dark Personality</h4>
-  <p class="muted">Roleplay instructions & character definition for After Dark mode.</p>
-  <textarea id="nsfwPrompt" rows="4" placeholder="e.g. Slow-burn romantic tension, vivid senses, never breaks character…"></textarea>
-  <div class="row-btns">
-    <button id="btnSaveNsfwPrompt" class="primary">Save Personality</button>
-    <button id="btnResetNsfwPrompt" class="ghost">Reset</button>
-  </div>
-
-  <h4>Wildness (Creativity)</h4>
-  <p class="muted">Controls temperature: 0.0 is strict & deterministic, 2.0 is wild & chaotic.</p>
-  <div class="slider-row">
-    <input id="nsfwTemp" type="range" min="0" max="2" step="0.1" value="0.8">
-    <span id="nsfwTempVal">0.8</span>
-  </div>
-  <label class="check-row">
-    <input id="nsfwTools" type="checkbox">
-    <span>Enable Tools for After Dark (Clock, Wikipedia Search)</span>
-  </label>
-
+  <h4>Voice Recognition (faster-whisper)</h4>
+  <p class="muted">On-device neural speech transcription for microphone &amp; audio file uploads.</p>
   <div class="panel-card">
     <div class="panel-card-head">
+      <div class="panel-card-icon-box violet-halo">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/>
+        </svg>
+      </div>
+      <div>
+        <div class="wb-item-title-row">
+          <strong>Whisper Engine Model</strong>
+          <span id="whisperModelBadge" class="wb-badge wb-badge-cyan">BASE MULTILINGUAL</span>
+        </div>
+        <span class="muted" style="font-size:0.72rem;">Supports English &amp; 98 languages with auto-detection</span>
+      </div>
+    </div>
+    <div class="voice-select-wrap" style="margin-top: 8px;">
+      <select id="whisperModelSelect" class="voice-select">
+        <option value="base">Base (Multilingual, 74M - Recommended)</option>
+        <option value="tiny.en">Tiny English (Fastest, 39M)</option>
+        <option value="tiny">Tiny Multilingual (39M)</option>
+        <option value="small">Small (High Accuracy, 244M)</option>
+      </select>
+    </div>
+  </div>
+
+  <h4>Web Search &amp; Online Intelligence (Treg)</h4>
+  <p class="muted">Live search engine proxy with server-side credential injection and routed endpoints.</p>
+  <div class="panel-card treg-panel-card">
+    <div class="panel-card-head">
+      <div class="panel-card-icon-box cyan-halo">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="2" y1="12" x2="22" y2="12"></line>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+        </svg>
+      </div>
+      <div>
+        <div class="wb-item-title-row">
+          <strong>Treg Search Engine Proxy</strong>
+          <span id="tregStatusBadge" class="wb-badge wb-badge-cyan">INSTALLED</span>
+        </div>
+        <span id="tregAuthSubtext" class="muted" style="font-size:0.72rem;">CLI Ready • DuckDuckGo Zero-Key Fallback Active</span>
+      </div>
+    </div>
+    
+    <div style="margin-top: 10px;">
+      <label class="treg-field-label" for="tregRouteSelect">Preferred Search Route</label>
+      <div class="voice-select-wrap">
+        <select id="tregRouteSelect" class="voice-select">
+          <option value="treg.web.search">Auto Routed (Treg Waterfall — 19 Providers)</option>
+          <option value="tinyfish.web.search">TinyFish (Free Open Web Index)</option>
+          <option value="duckduckgo.serp.organic">DuckDuckGo SERP</option>
+          <option value="perplexity.web.search.fast">Perplexity Fast Search</option>
+          <option value="tavily.web.search">Tavily Web Search</option>
+          <option value="direct_duckduckgo">Direct DuckDuckGo (Zero Key Required)</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="margin-top: 10px;">
+      <div class="treg-token-row-label">
+        <label class="treg-field-label" for="tregTokenInput">Treg API Token (Optional / Team Proxy)</label>
+        <span id="tregBalanceTag" class="wb-badge wb-badge-amber hidden">BALANCE</span>
+      </div>
+      <div class="treg-input-group">
+        <input type="password" id="tregTokenInput" class="cyber-input" placeholder="Enter TREG_TOKEN or leave empty for DuckDuckGo fallback" autocomplete="off">
+        <button id="btnToggleTregToken" type="button" class="comp-btn" title="Toggle token visibility">👁</button>
+      </div>
+    </div>
+
+    <div class="treg-actions-row" style="margin-top: 10px; display: flex; gap: 8px; justify-content: flex-end;">
+      <button id="btnTestTreg" type="button" class="cyber-btn ghost" style="font-size:0.75rem; padding: 4px 10px;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        Test Search
+      </button>
+      <button id="btnSaveTreg" type="button" class="cyber-btn primary-cyan" style="font-size:0.75rem; padding: 4px 12px;">Save Settings</button>
+    </div>
+    <div id="tregTestFeedback" class="treg-feedback hidden"></div>
+  </div>
+
+  <!-- After Dark Unrestricted Directive & Creativity -->
+  <div class="cyber-card" style="margin-top: 14px;">
+    <div class="cyber-card-head">
+      <div class="panel-card-icon-box violet-halo">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="2" y1="12" x2="22" y2="12"></line>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+        </svg>
+      </div>
+      <div>
+        <h4>After Dark Directive</h4>
+        <span class="cyber-tag violet-tag">UNRESTRICTED · CANDID</span>
+      </div>
+    </div>
+    <p class="muted card-desc">Radical candor, critical analysis, and unfiltered perspectives for After Dark mode.</p>
+    <div class="cyber-input-wrapper">
+      <span class="cyber-input-tag">SYSTEM DIRECTIVE</span>
+      <textarea id="nsfwPrompt" class="cyber-textarea violet-focus" rows="4" placeholder="e.g. Unvarnished objective truth, zero performative disclaimers, ruthless intellectual honesty…"></textarea>
+    </div>
+    <div class="row-btns" style="margin-top: 8px;">
+      <button id="btnSaveNsfwPrompt" class="cyber-btn primary-violet">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+        Save Directive
+      </button>
+      <button id="btnResetNsfwPrompt" class="cyber-btn ghost">Reset Default</button>
+    </div>
+
+    <div style="margin-top: 16px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 14px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+        <h4 style="margin: 0; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.06em; color: #c084fc;">Wildness (Creativity)</h4>
+        <span id="nsfwTempVal" class="cyber-slider-val violet-val">0.8</span>
+      </div>
+      <p class="muted card-desc" style="margin-top: 2px;">Controls temperature: 0.0 is strict &amp; deterministic, 2.0 is wild &amp; chaotic.</p>
+      <div class="slider-cyber-row">
+        <input id="nsfwTemp" class="cyber-slider violet-slider" type="range" min="0" max="2" step="0.1" value="0.8">
+      </div>
+      <div class="cyber-quick-pills">
+        <button type="button" class="cyber-pill" onclick="$('nsfwTemp').value=0.2; $('nsfwTemp').dispatchEvent(new Event('input')); $('nsfwTemp').dispatchEvent(new Event('change'));">0.2 Steady</button>
+        <button type="button" class="cyber-pill active" onclick="$('nsfwTemp').value=0.8; $('nsfwTemp').dispatchEvent(new Event('input')); $('nsfwTemp').dispatchEvent(new Event('change'));">0.8 Natural</button>
+        <button type="button" class="cyber-pill" onclick="$('nsfwTemp').value=1.3; $('nsfwTemp').dispatchEvent(new Event('input')); $('nsfwTemp').dispatchEvent(new Event('change'));">1.3 Wild</button>
+      </div>
+      <label class="cyber-check-row">
+        <input id="nsfwTools" type="checkbox">
+        <span class="cyber-check-label">Enable Tools for After Dark (Clock, Wikipedia Search)</span>
+      </label>
+    </div>
+  </div>
+
+  <!-- Import GGUF Model -->
+  <div class="cyber-card">
+    <div class="cyber-card-head">
+      <div class="panel-card-icon-box cyan-halo">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+      </div>
+      <div>
+        <h4>Import GGUF Model</h4>
+        <span class="cyber-tag cyan-tag">LOCAL TENSORS</span>
+      </div>
+    </div>
+    <p class="muted card-desc">Import a downloaded .gguf file into Ollama directly from your local disk.</p>
+    <div class="cyber-input-wrapper" style="margin-bottom: 8px;">
+      <span class="cyber-input-tag">MODEL_NAME</span>
+      <input id="ggufName" class="cyber-input cyan-focus" placeholder="Model name (e.g. dolphin3-8b)">
+    </div>
+    <div class="cyber-input-wrapper" style="margin-bottom: 12px;">
+      <span class="cyber-input-tag">LOCAL_PATH</span>
+      <input id="ggufPath" class="cyber-input cyan-focus" placeholder="Local path (e.g. /home/sumeet/models/model.gguf)">
+    </div>
+    <button id="btnImport" class="cyber-btn primary-cyan" style="width: 100%; justify-content: center;">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
         <polyline points="7 10 12 15 17 10"></polyline>
         <line x1="12" y1="15" x2="12" y2="3"></line>
       </svg>
-      <span>Import GGUF Model</span>
-    </div>
-    <p class="muted">Import a downloaded .gguf file into Ollama directly from your local disk.</p>
-    <input id="ggufName" placeholder="Model name (e.g. dolphin3-8b)">
-    <input id="ggufPath" placeholder="Local path (e.g. /home/sumeet/models/model.gguf)">
-    <button id="btnImport" class="primary">Import into Ollama</button>
-    <p id="importMsg" class="muted"></p>
+      Import into Ollama
+    </button>
+    <p id="importMsg" class="muted" style="margin-top: 6px; font-size: 0.76rem; font-family: var(--mono);"></p>
   </div>
 
-  <div class="panel-card">
-    <div class="panel-card-head">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-      </svg>
-      <span>Security Passcode</span>
+  <!-- Security Passcode -->
+  <div class="cyber-card">
+    <div class="cyber-card-head">
+      <div class="panel-card-icon-box amber-halo">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg>
+      </div>
+      <div>
+        <h4>Security Passcode</h4>
+        <span class="cyber-tag amber-tag">AES PIN LOCK</span>
+      </div>
     </div>
-    <p class="muted">Protect your local chats with a 4-digit PIN or password.</p>
-    <input id="newCode" type="password" placeholder="New passcode (4+ chars)">
-    <button id="btnSetCode" class="ghost">Update Passcode</button>
+    <p class="muted card-desc">Protect your local chats with a 4-digit PIN or password.</p>
+    <div class="cyber-input-wrapper" style="margin-bottom: 12px;">
+      <span class="cyber-input-tag">PASSCODE</span>
+      <input id="newCode" type="password" class="cyber-input amber-focus" placeholder="New passcode (4+ chars)">
+    </div>
+    <button id="btnSetCode" class="cyber-btn primary-amber" style="width: 100%; justify-content: center;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      Update Passcode
+    </button>
   </div>
 
-  <div class="panel-card">
-    <div class="panel-card-head">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-        <polyline points="17 21 17 13 7 13 7 21"></polyline>
-        <polyline points="7 3 7 8 15 8"></polyline>
-      </svg>
-      <span>Backup & Export</span>
+  <!-- Backup & Export -->
+  <div class="cyber-card">
+    <div class="cyber-card-head">
+      <div class="panel-card-icon-box emerald-halo">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+          <polyline points="17 21 17 13 7 13 7 21"></polyline>
+          <polyline points="7 3 7 8 15 8"></polyline>
+        </svg>
+      </div>
+      <div>
+        <h4>Backup &amp; Export</h4>
+        <span class="cyber-tag emerald-tag">SNAPSHOTS · ARCHIVE</span>
+      </div>
     </div>
-    <p class="muted">Export chat logs or backup your complete SQLite database file.</p>
+    <p class="muted card-desc">Export chat logs or backup your complete SQLite database file.</p>
+    <button id="btnBackup" class="cyber-btn primary-emerald" style="width: 100%; justify-content: center; margin-bottom: 8px;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+      Download SQLite Backup (.db)
+    </button>
     <div class="row-btns">
-      <button id="btnBackup" class="ghost">Download SQLite Backup</button>
-    </div>
-    <div class="row-btns">
-      <button id="btnExportNsfw" class="ghost">Export After Dark Chat</button>
-      <button id="btnExportFriend" class="ghost">Export Friend Chat</button>
+      <button id="btnExportNsfw" class="cyber-btn ghost" style="font-size: 0.78rem;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        Export After Dark
+      </button>
+      <button id="btnExportFriend" class="cyber-btn ghost" style="font-size: 0.78rem;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        Export Friend Chat
+      </button>
     </div>
   </div>
 </aside>
 
-<aside id="friendPanel" class="drawer hidden">
-  <div class="drawer-head"><h3>Friend remembers</h3><button class="ghost closeBtn" data-close="friendPanel">✕</button></div>
-  <p class="muted">Erasable. Lives in your local database only.</p>
-  <input id="friendName" placeholder="Your name">
-  <textarea id="friendAbout" rows="3" placeholder="About you: likes, timezone, goals…"></textarea>
-  <button id="btnSaveProfile" class="primary">Save</button>
-  <h4>Personality</h4>
-  <p class="muted">How Friend talks. Blank = default. Applies to new replies.</p>
-  <textarea id="friendPrompt" rows="4" placeholder="e.g. Talks like an old hostel roommate. Calls me bhai. Roasts me when I'm lazy."></textarea>
-  <div class="row-btns"><button id="btnSaveFriendPrompt" class="primary">Save personality</button><button id="btnResetFriendPrompt" class="ghost">Reset</button></div>
-  <h4>Wildness</h4>
-  <p class="muted">How predictable vs surprising Friend is. 0 = steady, 2 = chaotic.</p>
-  <div class="slider-row"><input id="friendTemp" type="range" min="0" max="2" step="0.1" value="0.8"><span id="friendTempVal">0.8</span></div>
-  <label class="check-row"><input id="friendTools" type="checkbox" checked><span>Tools for Friend (time, Wikipedia, memory)</span></label>
-  <h4>Learned from chat</h4>
-  <div id="factList"></div>
-  <input id="newFact" placeholder="Add a memory manually…">
-  <button id="btnAddFact" class="ghost">Remember this</button>
-  <button id="btnForget" class="ghost danger">Forget everything</button>
+<aside id="friendPanel" class="drawer cyber-drawer hidden">
+  <div class="drawer-head cyber-drawer-head">
+    <div class="drawer-title-wrap">
+      <div class="cyber-glyph-icon emerald-halo">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+          <circle cx="12" cy="7" r="4"></circle>
+        </svg>
+      </div>
+      <div>
+        <div class="cyber-title-row">
+          <h3>Friend Profile &amp; Memory</h3>
+          <span class="cyber-tag emerald-tag">FRIEND · MEMORY</span>
+        </div>
+        <span class="muted" style="font-size:0.75rem;">Erasable memory bank. Lives strictly in your local database.</span>
+      </div>
+    </div>
+    <button class="ghost closeBtn" data-close="friendPanel" title="Close drawer">✕</button>
+  </div>
+
+  <div class="cyber-drawer-body">
+    <!-- Section 1: User Profile -->
+    <div class="cyber-card">
+      <div class="cyber-card-head">
+        <span class="cyber-sec-badge emerald-badge">01 · PROFILE</span>
+        <h4>User Profile</h4>
+      </div>
+      <p class="muted card-desc">Personal details Friend remembers across conversations.</p>
+      <div class="cyber-input-wrapper" style="margin-bottom: 8px;">
+        <span class="cyber-input-tag">NAME</span>
+        <input id="friendName" class="cyber-input emerald-focus" placeholder="Your name">
+      </div>
+      <div class="cyber-input-wrapper" style="margin-bottom: 10px;">
+        <span class="cyber-input-tag">ABOUT</span>
+        <textarea id="friendAbout" class="cyber-textarea emerald-focus" rows="2" placeholder="About you: likes, timezone, goals…"></textarea>
+      </div>
+      <button id="btnSaveProfile" class="cyber-btn primary-emerald">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+        Save Profile
+      </button>
+    </div>
+
+    <!-- Section 2: Personality -->
+    <div class="cyber-card">
+      <div class="cyber-card-head">
+        <span class="cyber-sec-badge emerald-badge">02 · PERSONALITY</span>
+        <h4>Personality Directive</h4>
+      </div>
+      <p class="muted card-desc">How Friend talks. Blank = default. Applies to new replies.</p>
+      <div class="cyber-input-wrapper">
+        <span class="cyber-input-tag">DIRECTIVE</span>
+        <textarea id="friendPrompt" class="cyber-textarea emerald-focus" rows="3" placeholder="e.g. Talks like an old hostel roommate. Calls me bhai. Roasts me when I'm lazy."></textarea>
+      </div>
+      <div class="row-btns" style="margin-top: 8px;">
+        <button id="btnSaveFriendPrompt" class="cyber-btn primary-emerald">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+          Save Personality
+        </button>
+        <button id="btnResetFriendPrompt" class="cyber-btn ghost">Reset Default</button>
+      </div>
+
+      <div style="margin-top: 16px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 14px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+          <h4 style="margin: 0; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.06em; color: #34d399;">Wildness (Creativity)</h4>
+          <span id="friendTempVal" class="cyber-slider-val emerald-val">0.8</span>
+        </div>
+        <p class="muted card-desc" style="margin-top: 2px;">How predictable vs surprising Friend is. 0 = steady, 2 = chaotic.</p>
+        <div class="slider-cyber-row">
+          <input id="friendTemp" class="cyber-slider emerald-slider" type="range" min="0" max="2" step="0.1" value="0.8">
+        </div>
+        <div class="cyber-quick-pills">
+          <button type="button" class="cyber-pill" onclick="$('friendTemp').value=0.2; $('friendTemp').dispatchEvent(new Event('input')); $('friendTemp').dispatchEvent(new Event('change'));">0.2 Steady</button>
+          <button type="button" class="cyber-pill active" onclick="$('friendTemp').value=0.8; $('friendTemp').dispatchEvent(new Event('input')); $('friendTemp').dispatchEvent(new Event('change'));">0.8 Natural</button>
+          <button type="button" class="cyber-pill" onclick="$('friendTemp').value=1.3; $('friendTemp').dispatchEvent(new Event('input')); $('friendTemp').dispatchEvent(new Event('change'));">1.3 Chaotic</button>
+        </div>
+        <label class="cyber-check-row">
+          <input id="friendTools" type="checkbox" checked>
+          <span class="cyber-check-label">Tools for Friend (time, Wikipedia, memory recall)</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Section 3: Learned Memories -->
+    <div class="cyber-card">
+      <div class="cyber-card-head">
+        <span class="cyber-sec-badge emerald-badge">03 · MEMORY</span>
+        <h4>Learned Facts &amp; Memories</h4>
+      </div>
+      <p class="muted card-desc">Facts extracted automatically from conversation or added manually.</p>
+      <div id="factList" style="margin: 8px 0;"></div>
+      <div class="cyber-input-wrapper" style="margin-bottom: 8px;">
+        <span class="cyber-input-tag">ADD MEMORY</span>
+        <input id="newFact" class="cyber-input emerald-focus" placeholder="Add a memory manually…">
+      </div>
+      <div class="row-btns">
+        <button id="btnAddFact" class="cyber-btn ghost">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          Remember This
+        </button>
+        <button id="btnForget" class="cyber-btn ghost danger">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+          Forget Everything
+        </button>
+      </div>
+    </div>
+  </div>
 </aside>
 
 <aside id="architectPanel" class="drawer cyber-drawer hidden">
@@ -1319,7 +1668,7 @@
       <div>
         <div class="cyber-title-row">
           <h3>Architect Stack &amp; Rules</h3>
-          <span class="cyber-tag violet-tag">SYS::ARCHITECT // V2.5</span>
+          <span class="cyber-tag violet-tag">ARCHITECT · SPECS</span>
         </div>
         <span class="muted" style="font-size:0.75rem;">Persistent engineering stack, architecture standards &amp; lint directives</span>
       </div>
@@ -1331,12 +1680,12 @@
     <!-- Section 1: System Persona & Directive -->
     <div class="cyber-card">
       <div class="cyber-card-head">
-        <span class="cyber-sec-badge">SEC // 01</span>
+        <span class="cyber-sec-badge">01 · DIRECTIVE</span>
         <h4>Core Architecture &amp; System Directive</h4>
       </div>
       <p class="muted card-desc">Approach to code generation. Blank = default Principal Staff Engineer.</p>
       <div class="cyber-input-wrapper">
-        <span class="cyber-input-tag">DIRECTIVE.TXT</span>
+        <span class="cyber-input-tag">SYSTEM DIRECTIVE</span>
         <textarea id="architectPrompt" class="cyber-textarea" rows="3" placeholder="e.g. Always write production TypeScript with Zod validation. Favor modular domain logic. Explain Big-O complexity for algorithms."></textarea>
       </div>
       <div class="row-btns">
@@ -1351,7 +1700,7 @@
     <!-- Section 2: Determinism & Engine -->
     <div class="cyber-card">
       <div class="cyber-card-head">
-        <span class="cyber-sec-badge">SEC // 02</span>
+        <span class="cyber-sec-badge">02 · TEMPERATURE</span>
         <h4>Determinism &amp; Temperature Control</h4>
       </div>
       <p class="muted card-desc">0.05 = rigorous &amp; deterministic, 0.7 = exploratory architecture.</p>
@@ -1373,7 +1722,7 @@
     <!-- Section 3: Project Tech Stack & Libraries -->
     <div class="cyber-card">
       <div class="cyber-card-head">
-        <span class="cyber-sec-badge">SEC // 03</span>
+        <span class="cyber-sec-badge">03 · TECH STACK</span>
         <h4>Project Tech Stack &amp; Libraries</h4>
       </div>
       <p class="muted card-desc">Active frameworks, databases, and dependencies injected into prompt context.</p>
@@ -1388,7 +1737,7 @@
         <button type="button" class="cyber-pill" data-stack="Rust 2024 edition, Tokio async runtime, Axum web framework, SQLx, PostgreSQL, Tracing">Rust Systems + Axum</button>
       </div>
       <div class="cyber-input-wrapper">
-        <span class="cyber-input-tag">STACK.CONFIG</span>
+        <span class="cyber-input-tag">ACTIVE STACK</span>
         <textarea id="architectStack" class="cyber-textarea" rows="3" placeholder="e.g. TypeScript, React 19, Tailwind CSS v4, FastAPI, PostgreSQL, Prisma, Vitest"></textarea>
       </div>
     </div>
@@ -1396,7 +1745,7 @@
     <!-- Section 4: Engineering & Linting Rules -->
     <div class="cyber-card">
       <div class="cyber-card-head">
-        <span class="cyber-sec-badge">SEC // 04</span>
+        <span class="cyber-sec-badge">04 · LINT RULES</span>
         <h4>Engineering &amp; Linting Rules</h4>
       </div>
       <p class="muted card-desc">Non-negotiable coding conventions, safety constraints, and code standards.</p>
@@ -1409,7 +1758,7 @@
         <button type="button" class="cyber-pill" data-rule="Idempotent microservice design. Schema validation on all inbound/outbound boundaries. Structured JSON logging with trace context.">Resilient Services</button>
       </div>
       <div class="cyber-input-wrapper">
-        <span class="cyber-input-tag">RULES.LINT</span>
+        <span class="cyber-input-tag">CODE RULES</span>
         <textarea id="architectRules" class="cyber-textarea" rows="3" placeholder="e.g. Strict immutable state, zero any types, handle all error branches explicitly, include unit test cases for edge cases"></textarea>
       </div>
     </div>
@@ -1441,7 +1790,7 @@
       <div>
         <div class="cyber-title-row">
           <h3>Story &amp; World Bible</h3>
-          <span class="cyber-tag rose-tag">SYS::MUSE // NARRATIVE ENGINE</span>
+          <span class="cyber-tag rose-tag">MUSE · NARRATIVE</span>
         </div>
         <span class="muted" style="font-size:0.75rem;">Persistent worldbuilding, character dossiers &amp; narrative constraints</span>
       </div>
@@ -1453,12 +1802,12 @@
     <!-- Section 1: Narrative Voice & Directive -->
     <div class="cyber-card">
       <div class="cyber-card-head">
-        <span class="cyber-sec-badge rose-badge">LORE // 01</span>
+        <span class="cyber-sec-badge rose-badge">01 · VOICE &amp; TONE</span>
         <h4>Author Directive &amp; Narrative Voice</h4>
       </div>
       <p class="muted card-desc">Guiding tone, point of view, or role. Blank = default developmental editor persona.</p>
       <div class="cyber-input-wrapper">
-        <span class="cyber-input-tag">VOICE.TXT</span>
+        <span class="cyber-input-tag">NARRATIVE VOICE</span>
         <textarea id="musePrompt" class="cyber-textarea rose-focus" rows="3" placeholder="e.g. Socratic developmental editor. Third person limited POV, dark gothic fantasy, emphasis on sensory dread and psychological subtext."></textarea>
       </div>
       <div class="row-btns">
@@ -1473,7 +1822,7 @@
     <!-- Section 2: Fluency & Imagination -->
     <div class="cyber-card">
       <div class="cyber-card-head">
-        <span class="cyber-sec-badge rose-badge">LORE // 02</span>
+        <span class="cyber-sec-badge rose-badge">02 · IMAGINATION</span>
         <h4>Creative Fluency &amp; Imagination</h4>
       </div>
       <p class="muted card-desc">0.2 is structured &amp; deterministic, 0.85 is imaginative &amp; fluent, 1.2+ is surreal.</p>
@@ -1495,7 +1844,7 @@
     <!-- Section 3: World Bible & Setting Lore -->
     <div class="cyber-card">
       <div class="cyber-card-head">
-        <span class="cyber-sec-badge rose-badge">LORE // 03</span>
+        <span class="cyber-sec-badge rose-badge">03 · WORLD BIBLE</span>
         <h4>World Bible &amp; Setting Lore</h4>
       </div>
       <p class="muted card-desc">Geography, factions, magic/technology mechanics, timelines, and canon history.</p>
@@ -1509,7 +1858,7 @@
         <button type="button" class="cyber-pill" data-muse-bible="1952 rain-slicked metropolis. Corrupt precinct captains, cigarette smoke curling under flickering streetlamps, and jazz clubs concealing syndicate ledgers. Everyone has a debt they cannot pay.">Neo-Noir Detective</button>
       </div>
       <div class="cyber-input-wrapper">
-        <span class="cyber-input-tag">WORLD_BIBLE.MD</span>
+        <span class="cyber-input-tag">SETTING LORE</span>
         <textarea id="museBible" class="cyber-textarea rose-focus" rows="4" placeholder="e.g. The sunken city of Ys, magic fueled by memory loss, the three merchant guilds, taboo on daylight travel..."></textarea>
       </div>
     </div>
@@ -1517,12 +1866,12 @@
     <!-- Section 4: Character Dossiers -->
     <div class="cyber-card">
       <div class="cyber-card-head">
-        <span class="cyber-sec-badge rose-badge">LORE // 04</span>
+        <span class="cyber-sec-badge rose-badge">04 · CHARACTERS</span>
         <h4>Character Dossiers</h4>
       </div>
       <p class="muted card-desc">Protagonists, antagonists, internal flaws, secret motivations, and relationship dynamics.</p>
       <div class="cyber-input-wrapper">
-        <span class="cyber-input-tag">DOSSIERS.MD</span>
+        <span class="cyber-input-tag">CHARACTER DOSSIERS</span>
         <textarea id="museCharacters" class="cyber-textarea rose-focus" rows="4" placeholder="e.g. Roland: Cynical cartographer searching for his sister. Fear of open water. Secretly holds the last ember stone. Doesn't trust Anya."></textarea>
       </div>
     </div>
@@ -1530,7 +1879,7 @@
     <!-- Section 5: Style Constraints -->
     <div class="cyber-card">
       <div class="cyber-card-head">
-        <span class="cyber-sec-badge rose-badge">LORE // 05</span>
+        <span class="cyber-sec-badge rose-badge">05 · CONSTRAINTS</span>
         <h4>Style Constraints &amp; Author Directives</h4>
       </div>
       <p class="muted card-desc">Prose guidelines, forbidden clichés, pacing notes, and vocabulary rules.</p>
@@ -1542,7 +1891,7 @@
         <button type="button" class="cyber-pill" data-muse-rule="Fast cinematic pacing. Punchy staccato action beats alternating with lingering atmospheric dread. Sharp, clipped dialogue with unsaid conflict.">Cinematic &amp; Atmospheric</button>
       </div>
       <div class="cyber-input-wrapper">
-        <span class="cyber-input-tag">CONSTRAINTS.TXT</span>
+        <span class="cyber-input-tag">STYLE CONSTRAINTS</span>
         <textarea id="museRules" class="cyber-textarea rose-focus" rows="3" placeholder="e.g. Show don't tell. Visceral sensory details. Avoid modern colloquialisms. No melodrama without earned setup."></textarea>
       </div>
     </div>
@@ -2037,6 +2386,201 @@
   </div>
 </div>
 
+<!-- Cyber-Glass Audio Transcript Modal -->
+<div id="transModal" class="veil hidden">
+  <div class="veil-card trans-modal-card">
+    <div class="mic-modal-head">
+      <div class="mic-modal-title-wrap">
+        <div class="cyber-glyph-icon cyan-halo">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+            <line x1="12" y1="19" x2="12" y2="22"></line>
+          </svg>
+        </div>
+        <div>
+          <h3 id="transModalTitle">Audio Transcription</h3>
+          <div class="trans-meta-row" style="display:flex; gap:8px; align-items:center; margin-top:2px;">
+            <span id="transFileName" class="badge" style="font-size:0.72rem; padding:1px 6px;">audio.mp3</span>
+            <span id="transLangBadge" class="badge cyan-badge" style="font-size:0.72rem; padding:1px 6px;">LANG: EN</span>
+          </div>
+        </div>
+      </div>
+      <button id="btnCloseTransModal" class="ghost-xs" type="button">✕</button>
+    </div>
+
+    <div class="trans-modal-body" style="padding:14px 18px;">
+      <div class="trans-text-box" id="transModalContent" tabindex="0"></div>
+    </div>
+
+    <div class="mic-modal-footer">
+      <button id="btnInsertTrans" class="cyber-btn primary-cyan" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        <span>Insert into Prompt</span>
+      </button>
+      <button id="btnCopyTrans" class="cyber-btn ghost" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <span>Copy Text</span>
+      </button>
+      <button id="btnDismissTransModal" class="cyber-btn ghost" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Create / Edit Workspace Modal -->
+<div id="workspaceModal" class="veil hidden">
+  <div class="veil-card workspace-modal-card">
+    <div class="modal-head">
+      <div>
+        <h3 id="workspaceModalTitle">New Project Workspace</h3>
+        <span class="muted" style="font-size:0.75rem;">Scoped instructions, repository path &amp; memories</span>
+      </div>
+      <button id="btnCloseWorkspaceModal" class="ghost-xs" type="button">✕</button>
+    </div>
+    <form id="workspaceForm" class="modal-form-body" onsubmit="return false;">
+      <input type="hidden" id="wsInputId" value="" />
+      <div class="form-group">
+        <label for="wsInputName">Workspace Name</label>
+        <input type="text" id="wsInputName" placeholder="e.g. Lamplight Core, Fantasy Novel, Client Portal" required />
+      </div>
+      <div class="form-group">
+        <label for="wsInputRepo">Git Repository Path <span class="muted">(Local absolute path)</span></label>
+        <input type="text" id="wsInputRepo" placeholder="/home/sumeet/ChatBots" />
+      </div>
+      <div class="form-group">
+        <label for="wsInputInstructions">Domain Instructions <span class="muted">(Injected at top of model context)</span></label>
+        <textarea id="wsInputInstructions" rows="4" placeholder="Specific technical requirements, style guide, conventions, or project rules for this workspace..."></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="flex:1;">
+          <label for="wsInputModel">Preferred Model</label>
+          <select id="wsInputModel">
+            <option value="">(Inherit Global / Mode Default)</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btnCancelWorkspaceModal" class="ghost" type="button">Cancel</button>
+        <button id="btnSaveWorkspaceModal" class="primary" type="button">Save Workspace</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Workspace Manager Modal -->
+<div id="workspaceManageModal" class="veil hidden">
+  <div class="veil-card workspace-manage-card">
+    <div class="modal-head">
+      <div>
+        <h3>Manage Project Workspaces</h3>
+        <span class="muted" style="font-size:0.75rem;">Switch, edit, or create scoped workspaces</span>
+      </div>
+      <div class="modal-head-actions">
+        <button id="btnAddNewWsFromManage" class="cyber-btn primary-cyan" type="button">+ New Workspace</button>
+        <button id="btnCloseWorkspaceManageModal" class="ghost-xs" type="button">✕</button>
+      </div>
+    </div>
+    <div id="workspaceManageList" class="workspace-manage-list">
+      <!-- Dynamically populated list of workspaces -->
+    </div>
+    <div class="modal-footer">
+      <button id="btnDismissWorkspaceManageModal" class="ghost" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Memory Control Center Modal -->
+<div id="memoryCenterModal" class="veil hidden">
+  <div class="veil-card memory-modal-card">
+    <div class="modal-head">
+      <div class="modal-head-brand">
+        <span class="memory-brand-icon">🧠</span>
+        <div>
+          <h3>Memory Control Center</h3>
+          <span class="muted" style="font-size:0.75rem;">Curate, verify, edit, and audit persistent facts</span>
+        </div>
+      </div>
+      <div class="modal-head-actions">
+        <button id="btnAddNewMemory" class="cyber-btn primary-cyan" type="button">+ Add Memory</button>
+        <button id="btnCloseMemoryModal" class="ghost-xs" type="button">✕</button>
+      </div>
+    </div>
+
+    <!-- Add Memory Inline Drawer -->
+    <div id="addMemoryDrawer" class="memory-add-drawer hidden">
+      <div class="mem-drawer-title">Add New Memory</div>
+      <div class="mem-drawer-fields">
+        <textarea id="newMemContent" rows="2" placeholder="State the persistent fact, rule, or preference..."></textarea>
+        <div class="mem-drawer-row">
+          <select id="newMemScope">
+            <option value="global">Scope: Global (All Workspaces &amp; Bots)</option>
+            <option value="workspace">Scope: Current Workspace Only</option>
+          </select>
+          <select id="newMemCategory">
+            <option value="fact">Category: Fact</option>
+            <option value="preference">Category: Preference</option>
+            <option value="project">Category: Project</option>
+            <option value="instruction">Category: Instruction</option>
+            <option value="tech">Category: Tech Stack</option>
+          </select>
+          <button id="btnSaveNewMemory" class="primary" type="button">Save Memory</button>
+          <button id="btnCancelNewMemory" class="ghost" type="button">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="memory-filter-bar">
+      <div class="mem-scope-tabs">
+        <button class="mem-tab-btn on" data-scope="all">All Memories</button>
+        <button class="mem-tab-btn" data-scope="workspace">Current Workspace</button>
+        <button class="mem-tab-btn" data-scope="global">Global Facts</button>
+      </div>
+      <div class="mem-search-wrap">
+        <input type="text" id="memorySearchInput" placeholder="Search memories..." />
+      </div>
+    </div>
+
+    <div id="memoryListCards" class="memory-list-cards">
+      <!-- Dynamically populated memory cards with inline edit & delete -->
+    </div>
+
+    <div class="modal-footer">
+      <div class="memory-stats-footer" id="memoryStatsFooter">
+        <span>0 memories recorded</span>
+      </div>
+      <button id="btnDismissMemoryModal" class="ghost" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Database Backups & Snapshots Modal -->
+<div id="backupModal" class="veil hidden">
+  <div class="veil-card backup-modal-card">
+    <div class="modal-head">
+      <div>
+        <h3>Database Backups &amp; Snapshots</h3>
+        <span class="muted" style="font-size:0.75rem;">Atomic zero-lock SQLite snapshots with automatic rotation</span>
+      </div>
+      <div class="modal-head-actions">
+        <button id="btnCreateBackupNow" class="cyber-btn primary-cyan" type="button">📸 Create Snapshot</button>
+        <button id="btnCloseBackupModal" class="ghost-xs" type="button">✕</button>
+      </div>
+    </div>
+
+    <div class="backup-info-banner">
+      <span>Backups use SQLite's native <code>VACUUM INTO</code> engine. Conversations, settings, workspaces, and memories are snapshotted atomically without taking the app offline.</span>
+    </div>
+
+    <div id="backupSnapshotsList" class="backup-list-table-wrap">
+      <!-- Dynamically populated list of snapshots -->
+    </div>
+
+    <div class="modal-footer">
+      <button id="btnDismissBackupModal" class="ghost" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
 <div id="toasts"></div>
 <div id="confirmVeil" class="veil hidden">
   <div class="veil-card">
@@ -2045,6 +2589,6 @@
   </div>
 </div>
 
-<script src="/static/app.js?v=4.5"></script>
+<script src="/static/app.js?v=5.1"></script>
 </body>
 </html>
