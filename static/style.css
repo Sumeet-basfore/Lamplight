@@ -948,7 +948,7 @@ body.sessions-collapsed .glass-cartridge-bay {
 /* Hot-Swap Cassette Cards */
 .session-item {
   padding: 10px 12px;
-  background: rgba(22, 27, 38, 0.4);
+  background: var(--glass-surface);
   border: 1px solid var(--border-subtle);
   border-left: 3px solid transparent;
   border-radius: 8px;
@@ -960,15 +960,15 @@ body.sessions-collapsed .glass-cartridge-bay {
   transition: all 0.2s var(--spring-snap);
 }
 .session-item:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--glass-hover);
   border-color: var(--border-specular);
   transform: translateX(2px);
 }
 .session-item.active {
-  background: rgba(28, 35, 51, 0.7);
+  background: var(--glass-card);
   border-left-color: var(--accent);
   border-color: var(--border-specular);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), 0 0 10px var(--accent-soft);
 }
 .session-main {
   flex: 1;
@@ -1108,8 +1108,9 @@ body.sessions-collapsed .glass-cartridge-bay {
   width: 100%;
 }
 .hero-action-card {
-  background: rgba(22, 28, 40, 0.5);
+  background: var(--glass-surface);
   backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
   padding: 16px;
@@ -1121,9 +1122,10 @@ body.sessions-collapsed .glass-cartridge-bay {
   transition: all 0.2s var(--spring-snap);
 }
 .hero-action-card:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--glass-hover);
   border-color: var(--border-specular);
   transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), 0 0 14px var(--accent-soft);
 }
 .hac-icon { font-size: 20px; }
 .hac-text strong { display: block; font-family: var(--font-display); font-size: 13.5px; color: #fff; margin-bottom: 3px; }
@@ -1157,9 +1159,10 @@ body.sessions-collapsed .glass-cartridge-bay {
 .msg.user {
   align-self: flex-end;
   max-width: 82%;
-  border-left: 3px solid var(--text-dim);
-  background: rgba(20, 26, 38, 0.65);
-  color: #f8fafc;
+  border-left: 3px solid var(--accent);
+  background: var(--glass-surface);
+  color: var(--text-pri);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .msg.bot {
@@ -1167,7 +1170,7 @@ body.sessions-collapsed .glass-cartridge-bay {
   width: 100%;
   border-left: 3px solid var(--accent);
   background: var(--glass-card);
-  color: #f1f5f9;
+  color: var(--text-pri);
 }
 
 /* ---------- Message Typography & Markdown Elements ---------- */
@@ -1662,12 +1665,13 @@ body.sessions-collapsed .glass-cartridge-bay {
   color: #fff;
 }
 .code-canvas-btn {
-  color: #38bdf8;
-  border-color: rgba(56, 189, 248, 0.3);
+  color: var(--accent);
+  border-color: var(--accent-glow);
 }
 .code-canvas-btn:hover {
-  background: rgba(56, 189, 248, 0.15);
+  background: var(--accent-soft);
   color: #fff;
+  box-shadow: 0 0 10px var(--accent-glow);
 }
 
 .code-wrap pre {
@@ -1871,7 +1875,9 @@ pre code {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 4px;
+  padding: 4px 4px 0;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 .think-level-selector {
   display: flex;
@@ -7706,16 +7712,18 @@ main.canvas-open.canvas-maximized .canvas-panel {
 
 /* Smoked Glass Specular Highlights on Message Cards */
 .msg-assistant .bubble {
-  background: rgba(18, 24, 35, 0.65) !important;
+  background: var(--glass-card) !important;
   backdrop-filter: blur(20px) !important;
   -webkit-backdrop-filter: blur(20px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid var(--border-subtle) !important;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
 }
 
 .msg-user .bubble {
+  background: var(--glass-surface) !important;
   backdrop-filter: blur(20px) !important;
   -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid var(--border-subtle) !important;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
 }
 
@@ -7724,11 +7732,12 @@ main.canvas-open.canvas-maximized .canvas-panel {
    ========================================================================== */
 .cyber-drawer {
   width: min(520px, 94vw) !important;
-  background: rgba(10, 14, 24, 0.94) !important;
+  background: var(--bg-deep) !important;
+  background-image: linear-gradient(165deg, var(--glass-panel), var(--glass-surface)) !important;
   backdrop-filter: blur(28px) saturate(160%) !important;
   -webkit-backdrop-filter: blur(28px) saturate(160%) !important;
-  border-left: 1px solid rgba(255, 255, 255, 0.09) !important;
-  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.75), inset 1px 0 0 rgba(255, 255, 255, 0.06) !important;
+  border-left: 1px solid var(--border-specular) !important;
+  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.85), inset 1px 0 0 rgba(255, 255, 255, 0.06) !important;
   padding: 0 !important;
   display: flex !important;
   flex-direction: column !important;
@@ -7736,8 +7745,8 @@ main.canvas-open.canvas-maximized .canvas-panel {
 
 .cyber-drawer-head {
   padding: 18px 22px !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
-  background: rgba(14, 19, 32, 0.75) !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  background: var(--glass-surface) !important;
   position: sticky;
   top: 0;
   z-index: 10;
