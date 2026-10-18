@@ -25,6 +25,7 @@ from pydantic import BaseModel, field_validator
 import db
 import dev_workbench
 import knowledge_library
+import model_intelligence
 
 OLLAMA_URL = "http://localhost:11434"
 KEEP_ALIVE = "30m"
@@ -142,16 +143,38 @@ def get_model_thinking_capabilities(model_name: str, provider_type: str = "ollam
     return result
 
 
-def _chat_options(model_name: str, temp: float, num_predict: int = 8192) -> dict:
+def _chat_options(model_name: str, temp: float, num_predict: int = 8192,
+                  top_p: float = 0.9, presence_penalty: float = 0.0,
+                  frequency_penalty: float = 0.0) -> dict:
     """Enhanced generation options for high coherence, reduced repetition, and safety."""
-    return {
+    opts = {
         "temperature": temp,
         "num_predict": num_predict,
         "num_ctx": _get_num_ctx(model_name),
         "repeat_penalty": 1.12,
         "repeat_last_n": 64,
-        "top_p": 0.9,
+        "top_p": top_p,
     }
+    if presence_penalty:
+        opts["presence_penalty"] = presence_penalty
+    if frequency_penalty:
+        opts["frequency_penalty"] = frequency_penalty
+    return opts
+
+
+def _get_available_model_names() -> list[dict]:
+    """Returns list of active model dicts across all providers."""
+    providers = db.list_providers(active_only=True)
+    all_models = []
+    seen = set()
+    for p in providers:
+        p_models = fetch_provider_models(p)
+        for m in p_models:
+            key = (m["name"], m["provider_id"])
+            if key not in seen:
+                seen.add(key)
+                all_models.append(m)
+    return all_models
 
 
 def _get_loaded_models() -> list[dict]:
@@ -590,6 +613,11 @@ class ChatIn(BaseModel):
     skill: str | None = None
     thinking_level: str = "balanced"  # off, low, balanced, deep
     search_web: bool = False
+    auto_route: bool = False
+    task_type: str | None = None
+    preset_id: str | None = None
+    structured_schema: str | None = None
+    verify_answer: bool = False
 
     @field_validator("mode")
     @classmethod
@@ -604,6 +632,32 @@ class ChatIn(BaseModel):
         if v not in ("off", "low", "balanced", "deep"):
             return "balanced"
         return v
+
+
+class PresetIn(BaseModel):
+    name: str
+    description: str = ""
+    category: str = "general"
+    temperature: float = 0.7
+    top_p: float = 0.9
+    presence_penalty: float = 0.0
+    frequency_penalty: float = 0.0
+    num_predict: int = 4096
+    thinking_level: str = "balanced"
+    system_prefix: str = ""
+    id: str | None = None
+
+
+class RouterAnalyzeIn(BaseModel):
+    prompt: str = ""
+    attachments: list[dict] = []
+    explicit_task: str | None = None
+
+
+class VerificationIn(BaseModel):
+    user_prompt: str
+    assistant_reply: str
+    critic_model: str | None = None
 
 
 class SkillIn(BaseModel):
@@ -1617,9 +1671,22 @@ def chat(body: ChatIn, x_passcode: str | None = Header(default=None)):
         raise HTTPException(400, "empty message")
     else:
         formatted_prompt, images_b64 = _format_user_prompt(clean_msg, body.attachments)
-    model = _resolve_model(body)
+
+    # 1. Task Detection & Model Router
+    detected_task, task_conf = model_intelligence.detect_task_type(clean_msg, body.attachments, body.task_type)
+    if body.auto_route:
+        avail_models = [m["name"] for m in _get_available_model_names()]
+        model, routing_info = model_intelligence.route_model(detected_task, body.model, avail_models)
+    else:
+        model = _resolve_model(body)
+        routing_info = {"routed": False, "task_type": detected_task, "confidence": task_conf, "model": model, "rationale": f"Manual selection ({model})"}
+
     _ensure_single_model(model)
     temp = _get_temp(body.mode)
+    top_p = 0.9
+    pres_pen = 0.0
+    freq_pen = 0.0
+    preset_used = None
 
     # Capability check: detect if model supports thinking and determine effective level
     model_caps = get_model_thinking_capabilities(model)
@@ -1633,10 +1700,21 @@ def chat(body: ChatIn, x_passcode: str | None = Header(default=None)):
     else:
         eff_thinking_level = body.thinking_level if body.thinking_level in supported_levels else "balanced"
         think_enabled = (eff_thinking_level != "off")
-        if eff_thinking_level == "deep":
-            num_predict = 16384
-        else:
-            num_predict = 8192
+        num_predict = 16384 if eff_thinking_level == "deep" else 8192
+
+    # 2. Generation Preset
+    if body.preset_id:
+        preset = model_intelligence.get_generation_preset(body.preset_id)
+        if preset:
+            preset_used = preset["name"]
+            temp = preset["temperature"]
+            top_p = preset["top_p"]
+            pres_pen = preset["presence_penalty"]
+            freq_pen = preset["frequency_penalty"]
+            num_predict = preset["num_predict"]
+            if model_supports_thinking and preset["thinking_level"] in supported_levels:
+                eff_thinking_level = preset["thinking_level"]
+                think_enabled = (eff_thinking_level != "off")
 
     num_ctx = _get_num_ctx(model)
     msgs, was_compacted = _build_messages(
@@ -1647,6 +1725,25 @@ def chat(body: ChatIn, x_passcode: str | None = Header(default=None)):
         num_ctx=num_ctx,
         workspace_id=body.workspace_id
     )
+
+    # 3. Structured Output Mode
+    structured_schema_obj = None
+    if body.structured_schema:
+        if body.structured_schema in model_intelligence.STANDARD_SCHEMAS:
+            structured_schema_obj = model_intelligence.STANDARD_SCHEMAS[body.structured_schema]["schema"]
+            schema_title = model_intelligence.STANDARD_SCHEMAS[body.structured_schema]["title"]
+        else:
+            try:
+                structured_schema_obj = json.loads(body.structured_schema)
+                schema_title = "Custom JSON Schema"
+            except Exception:
+                structured_schema_obj = body.structured_schema
+                schema_title = "Custom Schema"
+        msgs.append({
+            "role": "system",
+            "content": model_intelligence.build_structured_prompt_instructions(structured_schema_obj, schema_title)
+        })
+
     use_tools = (_tools_enabled(body.mode) or body.search_web) and not body.regenerate
     if body.search_web and clean_msg:
         s_res = _treg_web_search(clean_msg, count=5)
@@ -1662,15 +1759,29 @@ def chat(body: ChatIn, x_passcode: str | None = Header(default=None)):
             })
     if use_tools:
         msgs = _resolve_tools(model, msgs, body.mode, temp)
+
+    # 4. Resource-Aware Headroom Guard
+    headroom = model_intelligence.get_system_resource_headroom()
+    if not headroom.get("safe_to_load_large"):
+        model_intelligence.eject_idle_models(keep_model=model)
+
+    opts = _chat_options(model, temp, num_predict=num_predict, top_p=top_p,
+                         presence_penalty=pres_pen, frequency_penalty=freq_pen)
     
-    opts = _chat_options(model, temp, num_predict=num_predict)
+    t0 = time.perf_counter()
+    req_payload = {
+        "model": model,
+        "messages": msgs,
+        "options": opts,
+        "think": think_enabled,
+        "keep_alive": KEEP_ALIVE,
+        "stream": False
+    }
+    if body.structured_schema:
+        req_payload["format"] = "json"
+
     try:
-        r = requests.post(f"{OLLAMA_URL}/api/chat",
-                          json={"model": model, "messages": msgs,
-                                "options": opts,
-                                "think": think_enabled,
-                                "keep_alive": KEEP_ALIVE,
-                                "stream": False}, timeout=180)
+        r = requests.post(f"{OLLAMA_URL}/api/chat", json=req_payload, timeout=180)
     except requests.ConnectionError:
         raise HTTPException(502, "ollama not running — run `ollama serve`")
     if r.status_code != 200:
@@ -1682,6 +1793,8 @@ def chat(body: ChatIn, x_passcode: str | None = Header(default=None)):
     reply = re.sub(r"<think>[\s\S]*?</think>", "", raw_reply).strip() or raw_reply
     if not reply:
         raise HTTPException(502, "empty reply from model")
+
+    dur_ms = int((time.perf_counter() - t0) * 1000)
     skill_tag = active_skill["command"] if active_skill else None
     if not body.regenerate:
         att_json = json.dumps(body.attachments) if body.attachments else None
@@ -1691,8 +1804,63 @@ def chat(body: ChatIn, x_passcode: str | None = Header(default=None)):
     if body.mode == "friend":
         _maybe_roll_summary(model)
         _learn_facts_bg(model, body.message, reply)
+
+    # 5. Structured Validation
+    structured_valid = True
+    structured_data = None
+    if body.structured_schema:
+        val_res = model_intelligence.validate_structured_response(reply, structured_schema_obj)
+        structured_valid = val_res["valid"]
+        structured_data = val_res["parsed"]
+
+    # 6. Answer Verification Critic
+    verification_critique = None
+    verification_score = None
+    if body.verify_answer and clean_msg:
+        crit_res = model_intelligence.generate_answer_verification(clean_msg, reply)
+        if crit_res.get("ok"):
+            verification_critique = crit_res.get("critique")
+            verification_score = crit_res.get("score")
+
+    # 7. Request Recording for Prompt Debugger
+    req_id = model_intelligence.record_inference_request(
+        session_id=sid,
+        workspace_id=body.workspace_id,
+        mode=body.mode,
+        requested_model=body.model or ("auto" if body.auto_route else model),
+        effective_model=model,
+        task_type=detected_task,
+        routing_rationale=routing_info.get("rationale", ""),
+        preset_id=body.preset_id,
+        messages=msgs,
+        options=opts,
+        response_content=reply,
+        thinking_content=th,
+        duration_ms=dur_ms,
+        tokens_per_sec=round(len(reply.split()) / max(0.1, dur_ms/1000.0) * 1.3, 1),
+        status="ok",
+        structured_schema=body.structured_schema,
+        structured_valid=structured_valid,
+        verification_critique=verification_critique
+    )
+
     sess = db.get_session(sid)
-    return {"reply": reply, "model": model, "session_id": sid, "session_title": sess.get("title") if sess else None, "skill": skill_tag, "context_refreshed": was_compacted}
+    return {
+        "reply": reply,
+        "model": model,
+        "session_id": sid,
+        "session_title": sess.get("title") if sess else None,
+        "skill": skill_tag,
+        "context_refreshed": was_compacted,
+        "task_type": detected_task,
+        "routing_info": routing_info,
+        "preset_used": preset_used,
+        "structured_valid": structured_valid,
+        "structured_data": structured_data,
+        "verification_critique": verification_critique,
+        "verification_score": verification_score,
+        "request_id": req_id
+    }
 
 
 @app.post("/api/chat-stream")
@@ -1712,9 +1880,21 @@ def chat_stream(body: ChatIn, x_passcode: str | None = Header(default=None)):
         raise HTTPException(400, "empty message")
     else:
         formatted_prompt, images_b64 = _format_user_prompt(clean_msg, body.attachments)
-    model = _resolve_model(body)
+    # 1. Task Detection & Model Router
+    detected_task, task_conf = model_intelligence.detect_task_type(clean_msg, body.attachments, body.task_type)
+    if body.auto_route:
+        avail_models = [m["name"] for m in _get_available_model_names()]
+        model, routing_info = model_intelligence.route_model(detected_task, body.model, avail_models)
+    else:
+        model = _resolve_model(body)
+        routing_info = {"routed": False, "task_type": detected_task, "confidence": task_conf, "model": model, "rationale": f"Manual selection ({model})"}
+
     _ensure_single_model(model)
     temp = _get_temp(body.mode)
+    top_p = 0.9
+    pres_pen = 0.0
+    freq_pen = 0.0
+    preset_used = None
 
     # Capability check: detect if model supports thinking and determine effective level
     model_caps = get_model_thinking_capabilities(model)
@@ -1728,10 +1908,21 @@ def chat_stream(body: ChatIn, x_passcode: str | None = Header(default=None)):
     else:
         eff_thinking_level = body.thinking_level if body.thinking_level in supported_levels else "balanced"
         think_enabled = (eff_thinking_level != "off")
-        if eff_thinking_level == "deep":
-            num_predict = 16384
-        else:
-            num_predict = 8192
+        num_predict = 16384 if eff_thinking_level == "deep" else 8192
+
+    # 2. Generation Preset
+    if body.preset_id:
+        preset = model_intelligence.get_generation_preset(body.preset_id)
+        if preset:
+            preset_used = preset["name"]
+            temp = preset["temperature"]
+            top_p = preset["top_p"]
+            pres_pen = preset["presence_penalty"]
+            freq_pen = preset["frequency_penalty"]
+            num_predict = preset["num_predict"]
+            if model_supports_thinking and preset["thinking_level"] in supported_levels:
+                eff_thinking_level = preset["thinking_level"]
+                think_enabled = (eff_thinking_level != "off")
 
     num_ctx = _get_num_ctx(model)
     msgs, was_compacted = _build_messages(
@@ -1742,6 +1933,25 @@ def chat_stream(body: ChatIn, x_passcode: str | None = Header(default=None)):
         num_ctx=num_ctx,
         workspace_id=body.workspace_id
     )
+
+    # 3. Structured Output Mode
+    structured_schema_obj = None
+    if body.structured_schema:
+        if body.structured_schema in model_intelligence.STANDARD_SCHEMAS:
+            structured_schema_obj = model_intelligence.STANDARD_SCHEMAS[body.structured_schema]["schema"]
+            schema_title = model_intelligence.STANDARD_SCHEMAS[body.structured_schema]["title"]
+        else:
+            try:
+                structured_schema_obj = json.loads(body.structured_schema)
+                schema_title = "Custom JSON Schema"
+            except Exception:
+                structured_schema_obj = body.structured_schema
+                schema_title = "Custom Schema"
+        msgs.append({
+            "role": "system",
+            "content": model_intelligence.build_structured_prompt_instructions(structured_schema_obj, schema_title)
+        })
+
     use_tools = (_tools_enabled(body.mode) or body.search_web) and not body.regenerate
     if body.search_web and clean_msg:
         s_res = _treg_web_search(clean_msg, count=5)
@@ -1757,8 +1967,14 @@ def chat_stream(body: ChatIn, x_passcode: str | None = Header(default=None)):
             })
     if use_tools:
         msgs = _resolve_tools(model, msgs, body.mode, temp)
-    
-    opts = _chat_options(model, temp, num_predict=num_predict)
+
+    # 4. Resource-Aware Headroom Guard
+    headroom = model_intelligence.get_system_resource_headroom()
+    if not headroom.get("safe_to_load_large"):
+        model_intelligence.eject_idle_models(keep_model=model)
+
+    opts = _chat_options(model, temp, num_predict=num_predict, top_p=top_p,
+                         presence_penalty=pres_pen, frequency_penalty=freq_pen)
 
     def gen():
         full: list[str] = []
@@ -1767,13 +1983,20 @@ def chat_stream(body: ChatIn, x_passcode: str | None = Header(default=None)):
         t_first = None
         if was_compacted:
             yield json.dumps({"context_refreshed": True, "notice": "Context window refreshed: session history compacted into rolling memory."}) + "\n"
+        req_payload = {
+            "model": model,
+            "messages": msgs,
+            "options": opts,
+            "think": think_enabled,
+            "keep_alive": KEEP_ALIVE,
+            "stream": True
+        }
+        if body.structured_schema:
+            req_payload["format"] = "json"
+
         try:
             with requests.post(f"{OLLAMA_URL}/api/chat",
-                               json={"model": model, "messages": msgs,
-                                     "options": opts,
-                                     "think": think_enabled,
-                                     "keep_alive": KEEP_ALIVE,
-                                     "stream": True},
+                               json=req_payload,
                                stream=True, timeout=300) as r:
                 if r.status_code != 200:
                     db.log_inference(model=model, provider="ollama", prompt_chars=len(body.message or ""), response_chars=0, duration_ms=int((time.perf_counter()-t0)*1000), status="error", error_msg=r.text[:300])
@@ -1823,8 +2046,62 @@ def chat_stream(body: ChatIn, x_passcode: str | None = Header(default=None)):
             if body.mode == "friend":
                 _maybe_roll_summary(model)
                 _learn_facts_bg(model, body.message, reply)
+
+            # Structured response validation
+            structured_valid = True
+            structured_data = None
+            if body.structured_schema:
+                val_res = model_intelligence.validate_structured_response(reply, structured_schema_obj)
+                structured_valid = val_res["valid"]
+                structured_data = val_res["parsed"]
+
+            # Answer Verification Critic
+            verification_critique = None
+            verification_score = None
+            if body.verify_answer and clean_msg:
+                crit_res = model_intelligence.generate_answer_verification(clean_msg, reply)
+                if crit_res.get("ok"):
+                    verification_critique = crit_res.get("critique")
+                    verification_score = crit_res.get("score")
+
+            # Request Recording for Prompt Debugger
+            req_id = model_intelligence.record_inference_request(
+                session_id=sid,
+                workspace_id=body.workspace_id,
+                mode=body.mode,
+                requested_model=body.model or ("auto" if body.auto_route else model),
+                effective_model=model,
+                task_type=detected_task,
+                routing_rationale=routing_info.get("rationale", ""),
+                preset_id=body.preset_id,
+                messages=msgs,
+                options=opts,
+                response_content=reply,
+                thinking_content=th_full,
+                duration_ms=dur_ms,
+                tokens_per_sec=tps,
+                status="ok",
+                structured_schema=body.structured_schema,
+                structured_valid=structured_valid,
+                verification_critique=verification_critique
+            )
+
             sess = db.get_session(sid)
-            yield json.dumps({"done": True, "model": model, "session_id": sid, "session_title": sess.get("title") if sess else None, "skill": skill_tag}) + "\n"
+            yield json.dumps({
+                "done": True,
+                "model": model,
+                "session_id": sid,
+                "session_title": sess.get("title") if sess else None,
+                "skill": skill_tag,
+                "task_type": detected_task,
+                "routing_info": routing_info,
+                "preset_used": preset_used,
+                "structured_valid": structured_valid,
+                "structured_data": structured_data,
+                "verification_critique": verification_critique,
+                "verification_score": verification_score,
+                "request_id": req_id
+            }) + "\n"
         else:
             yield json.dumps({"error": "empty reply from model"}) + "\n"
 
@@ -3035,6 +3312,128 @@ def models():
 @app.get("/api/model-capabilities")
 def model_capabilities(model: str = Query(..., description="Model name or full identifier")):
     return get_model_thinking_capabilities(model)
+
+
+# ============================================================================
+# Model Intelligence, Router, Presets & Prompt Debugger API
+# ============================================================================
+
+@app.get("/api/models/profiles")
+def get_model_profiles(x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    avail = [m["name"] for m in _get_available_model_names()]
+    profiles = model_intelligence.get_all_model_profiles(avail)
+    return {"ok": True, "profiles": profiles}
+
+
+@app.post("/api/router/analyze")
+def router_analyze(body: RouterAnalyzeIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    task_type, conf = model_intelligence.detect_task_type(body.prompt, body.attachments, body.explicit_task)
+    avail = [m["name"] for m in _get_available_model_names()]
+    best_model, route_meta = model_intelligence.route_model(task_type, "auto", avail)
+    return {
+        "ok": True,
+        "task_type": task_type,
+        "confidence": conf,
+        "recommended_model": best_model,
+        "routing_meta": route_meta
+    }
+
+
+@app.get("/api/router/headroom")
+def router_headroom(x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    return {"ok": True, "headroom": model_intelligence.get_system_resource_headroom()}
+
+
+@app.post("/api/router/eject")
+def router_eject(keep_model: str | None = None, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    evicted = model_intelligence.eject_idle_models(keep_model=keep_model)
+    return {"ok": True, "evicted": evicted}
+
+
+@app.get("/api/presets")
+def get_presets(x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    return {"ok": True, "presets": model_intelligence.list_generation_presets()}
+
+
+@app.post("/api/presets")
+def save_preset(body: PresetIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    if not body.name.strip():
+        raise HTTPException(400, "Preset name required")
+    res = model_intelligence.save_generation_preset(
+        name=body.name,
+        description=body.description,
+        category=body.category,
+        temperature=body.temperature,
+        top_p=body.top_p,
+        presence_penalty=body.presence_penalty,
+        frequency_penalty=body.frequency_penalty,
+        num_predict=body.num_predict,
+        thinking_level=body.thinking_level,
+        system_prefix=body.system_prefix,
+        preset_id=body.id
+    )
+    return {"ok": True, "preset": res}
+
+
+@app.delete("/api/presets/{preset_id}")
+def delete_preset(preset_id: str, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    ok = model_intelligence.delete_generation_preset(preset_id)
+    return {"ok": ok}
+
+
+@app.get("/api/schemas/standard")
+def get_standard_schemas(x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    return {"ok": True, "schemas": model_intelligence.STANDARD_SCHEMAS}
+
+
+@app.get("/api/debugger/records")
+def get_debugger_records(limit: int = 50, session_id: str | None = None, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    records = model_intelligence.list_request_records(limit=limit, session_id=session_id)
+    return {"ok": True, "records": records}
+
+
+@app.get("/api/debugger/records/{req_id}")
+def get_debugger_record_detail(req_id: str, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    rec = model_intelligence.get_request_record(req_id)
+    if not rec:
+        raise HTTPException(404, "record not found")
+    return {"ok": True, "record": rec}
+
+
+@app.get("/api/debugger/diff")
+def get_debugger_diff(id_a: str, id_b: str, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    diff_res = model_intelligence.diff_request_records(id_a, id_b)
+    return {"ok": True, "diff": diff_res}
+
+
+@app.post("/api/chat/verify")
+def chat_verify(body: VerificationIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    res = model_intelligence.generate_answer_verification(body.user_prompt, body.assistant_reply, body.critic_model)
+    return {"ok": True, "verification": res}
 
 
 # ---------- Providers API ----------

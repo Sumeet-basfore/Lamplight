@@ -871,7 +871,7 @@ function showApp() {
   $("btnMemory").classList.toggle("hidden", mode !== "friend");
   if ($("btnArchitectStack")) $("btnArchitectStack").classList.toggle("hidden", mode !== "architect");
   if ($("btnMuseBible")) $("btnMuseBible").classList.toggle("hidden", mode !== "muse");
-  wireTabs(); moveGlow(); loadPicker(); loadHistory(); loadSessions(mode); loadVramStatus(); wireThemes(); loadSkills(); wireSkills(); wireTts(); loadTtsSettings(); initTranscriptModal(); wireCanvas(); wireLab(); wireArena(); wireProviderForm(); wireDocHub(); wireObservatory(); wirePrompts(); wireWorkbenchMenu(); wireArchitect(); wireMuse(); wireThinkingLevels(); wireModelCartridge(); wireWebSearch(); wireTreg(); wireWorkspaces(); loadWorkspaces(); wireMemoryCenter(); wireBackups(); wireDevWorkbench(); wireKnowledgeStudio();
+  wireTabs(); moveGlow(); loadPicker(); loadHistory(); loadSessions(mode); loadVramStatus(); wireThemes(); loadSkills(); wireSkills(); wireTts(); loadTtsSettings(); initTranscriptModal(); wireCanvas(); wireLab(); wireArena(); wireProviderForm(); wireDocHub(); wireObservatory(); wirePrompts(); wireWorkbenchMenu(); wireArchitect(); wireMuse(); wireThinkingLevels(); wireModelCartridge(); wireWebSearch(); wireTreg(); wireWorkspaces(); loadWorkspaces(); wireMemoryCenter(); wireBackups(); wireDevWorkbench(); wireKnowledgeStudio(); wireModelIntelligence();
 }
 
 document.addEventListener("click", (e) => {
@@ -3915,7 +3915,11 @@ async function sendStream(v, el, attachments = [], skillCmd = undefined) {
         attachments: attachments,
         skill: skillCmd,
         thinking_level: getThinkingLevel(mode),
-        search_web: isWebSearchActive
+        search_web: isWebSearchActive,
+        auto_route: stateModelIntelligence.autoRoute,
+        preset_id: stateModelIntelligence.activePresetId || undefined,
+        structured_schema: stateModelIntelligence.activeSchema || undefined,
+        verify_answer: stateModelIntelligence.verifyAnswer
       }), signal: aborter.signal });
     if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.detail || r.statusText); }
     clearTimeout(warmTimer);
@@ -3948,6 +3952,12 @@ async function sendStream(v, el, attachments = [], skillCmd = undefined) {
           el.classList.remove("streaming");
           renderLiveReply(el, raw, rawThinking, true);
           stamp(el, null, j.model || null, j.skill || skillCmd || null);
+          if (j.routing_info && j.routing_info.routed) {
+            renderMessageRoutingBadge(el, j.routing_info);
+          }
+          if (j.verification_critique) {
+            renderMessageVerificationCard(el, j.verification_critique, j.verification_score);
+          }
           copyBtn(el);
           setStreaming(false);
           updateHero(1);
@@ -7954,6 +7964,12 @@ function wireWorkbenchMenu() {
     openKnowledgeStudio();
   });
 
+  $("wbItemModelIntelligence")?.addEventListener("click", () => {
+    closeWorkbenchMenu();
+    closeDrawers();
+    openModelIntelligenceModal();
+  });
+
   $("wbItemObservatory")?.addEventListener("click", () => {
     closeWorkbenchMenu();
     closeDrawers();
@@ -10035,6 +10051,600 @@ async function saveManualFlashcard() {
   } catch (err) {
     toast("Failed to save flashcard: " + err.message, true);
   }
+}
+
+/* ============================================================================
+   PILLAR 2: MODEL INTELLIGENCE, ROUTER, PRESETS & PROMPT DEBUGGER CONTROLLER
+   ============================================================================ */
+
+const stateModelIntelligence = {
+  autoRoute: false,
+  activePresetId: null,
+  activePresetName: "Balanced",
+  activeSchema: "",
+  activeSchemaName: "Standard",
+  verifyAnswer: false,
+  cachedProfiles: [],
+  cachedPresets: [],
+  selectedRecordId: null
+};
+
+function wireModelIntelligence() {
+  // Modal Open / Close
+  $("btnCloseModelIntelligenceModal")?.addEventListener("click", closeModelIntelligenceModal);
+  $("btnDismissModelIntelligenceModal")?.addEventListener("click", closeModelIntelligenceModal);
+
+  // Modal Tabs Switching
+  const tabBtns = document.querySelectorAll("#modelIntelligenceModal .mi-tabs-bar .k-tab-btn");
+  tabBtns.forEach(btn => {
+    btn.addEventListener("click", () => {
+      const targetId = btn.getAttribute("data-tab");
+      tabBtns.forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+
+      document.querySelectorAll("#modelIntelligenceModal .mi-tab-pane").forEach(pane => {
+        pane.classList.add("hidden");
+        pane.classList.remove("active");
+      });
+
+      const activePane = $(targetId);
+      if (activePane) {
+        activePane.classList.remove("hidden");
+        activePane.classList.add("active");
+      }
+
+      if (targetId === "miTabMatrix") loadModelProfilesMatrix();
+      else if (targetId === "miTabRouter") loadRouterHeadroom();
+      else if (targetId === "miTabPresets") loadGenerationPresets();
+      else if (targetId === "miTabDebugger") loadDebuggerRecords();
+    });
+  });
+
+  // Search in Capability Matrix
+  $("miMatrixSearch")?.addEventListener("input", (e) => {
+    renderModelProfilesMatrix(e.target.value.toLowerCase().trim());
+  });
+
+  $("btnRefreshProfiles")?.addEventListener("click", () => {
+    loadModelProfilesMatrix(true);
+  });
+
+  // Router Sandbox & Headroom
+  $("btnMiEjectIdle")?.addEventListener("click", async () => {
+    try {
+      const res = await api("/api/router/eject", { method: "POST" });
+      toast(`Evicted ${res.evicted ? res.evicted.length : 0} idle models from VRAM ✓`);
+      loadRouterHeadroom();
+    } catch (e) {
+      toast("Failed to eject models: " + e.message, true);
+    }
+  });
+
+  $("btnMiTestRoute")?.addEventListener("click", async () => {
+    const prompt = $("miRouterTestPrompt")?.value.trim();
+    if (!prompt) {
+      toast("Please enter a test prompt first", true);
+      return;
+    }
+    try {
+      const res = await api("/api/router/analyze", {
+        method: "POST",
+        body: JSON.stringify({ prompt: prompt })
+      });
+      const resPill = $("miRouterTestResult");
+      const tag = $("miRouterResultTag");
+      const model = $("miRouterResultModel");
+      if (resPill && tag && model) {
+        resPill.classList.remove("hidden");
+        tag.textContent = `${res.task_type.toUpperCase()} (${Math.round(res.confidence * 100)}%)`;
+        model.textContent = res.recommended_model;
+      }
+    } catch (e) {
+      toast("Routing analysis error: " + e.message, true);
+    }
+  });
+
+  // Presets Sliders & Form
+  $("btnCreatePreset")?.addEventListener("click", () => {
+    $("miPresetForm")?.classList.toggle("hidden");
+  });
+  $("btnCancelPresetForm")?.addEventListener("click", () => {
+    $("miPresetForm")?.classList.add("hidden");
+  });
+
+  $("miSliderTemp")?.addEventListener("input", (e) => {
+    if ($("miValTemp")) $("miValTemp").textContent = e.target.value;
+  });
+  $("miSliderTopP")?.addEventListener("input", (e) => {
+    if ($("miValTopP")) $("miValTopP").textContent = e.target.value;
+  });
+  $("miSliderPres")?.addEventListener("input", (e) => {
+    if ($("miValPres")) $("miValPres").textContent = e.target.value;
+  });
+  $("miSliderFreq")?.addEventListener("input", (e) => {
+    if ($("miValFreq")) $("miValFreq").textContent = e.target.value;
+  });
+
+  $("btnSavePreset")?.addEventListener("click", async () => {
+    const name = $("miPresetNameInput")?.value.trim();
+    if (!name) {
+      toast("Preset name required", true);
+      return;
+    }
+    const cat = $("miPresetCatSelect")?.value || "general";
+    const temp = parseFloat($("miSliderTemp")?.value || "0.7");
+    const topP = parseFloat($("miSliderTopP")?.value || "0.9");
+    const pres = parseFloat($("miSliderPres")?.value || "0.0");
+    const freq = parseFloat($("miSliderFreq")?.value || "0.0");
+    const numPredict = parseInt($("miNumPredictInput")?.value || "4096", 10);
+    const thinkingLevel = $("miThinkingLevelSelect")?.value || "balanced";
+    const desc = $("miPresetDescInput")?.value.trim() || "";
+
+    try {
+      await api("/api/presets", {
+        method: "POST",
+        body: JSON.stringify({
+          name: name,
+          description: desc,
+          category: cat,
+          temperature: temp,
+          top_p: topP,
+          presence_penalty: pres,
+          frequency_penalty: freq,
+          num_predict: numPredict,
+          thinking_level: thinkingLevel
+        })
+      });
+      toast(`Preset "${name}" saved! ✓`);
+      $("miPresetForm")?.classList.add("hidden");
+      loadGenerationPresets();
+    } catch (e) {
+      toast("Failed to save preset: " + e.message, true);
+    }
+  });
+
+  // Prompt Debugger Refresh
+  $("btnRefreshDebugger")?.addEventListener("click", () => {
+    loadDebuggerRecords();
+  });
+
+  // Wire Composer Toolbar Controls
+  wireComposerModelIntelligence();
+}
+
+function wireComposerModelIntelligence() {
+  // 1. Auto-Route Button
+  const btnAutoRoute = $("btnAutoRoute");
+  btnAutoRoute?.addEventListener("click", () => {
+    stateModelIntelligence.autoRoute = !stateModelIntelligence.autoRoute;
+    btnAutoRoute.classList.toggle("active", stateModelIntelligence.autoRoute);
+    btnAutoRoute.setAttribute("aria-pressed", stateModelIntelligence.autoRoute ? "true" : "false");
+    const label = $("autoRouteLabel");
+    if (label) label.textContent = stateModelIntelligence.autoRoute ? "Route: Auto" : "Router";
+    toast(stateModelIntelligence.autoRoute ? "⚡ Model Router: ON (Will select best model per task)" : "Model Router: OFF (Manual model selection)");
+  });
+
+  // 2. Generation Preset Dropdown
+  const btnGenPreset = $("btnGenPreset");
+  const presetDropdown = $("presetDropdownMenu");
+  btnGenPreset?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    presetDropdown?.classList.toggle("hidden");
+    if (presetDropdown && !presetDropdown.classList.contains("hidden")) {
+      populateComposerPresetsDropdown();
+    }
+  });
+
+  // 3. Structured JSON Schema Dropdown
+  const btnStructured = $("btnStructuredMode");
+  const schemaDropdown = $("schemaDropdownMenu");
+  btnStructured?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    schemaDropdown?.classList.toggle("hidden");
+  });
+
+  document.querySelectorAll("#schemaItemsList .comp-popover-item").forEach(item => {
+    item.addEventListener("click", () => {
+      const schemaKey = item.getAttribute("data-schema");
+      stateModelIntelligence.activeSchema = schemaKey;
+      document.querySelectorAll("#schemaItemsList .comp-popover-item").forEach(i => i.classList.remove("on"));
+      item.classList.add("on");
+
+      const isActive = !!schemaKey;
+      btnStructured?.classList.toggle("active", isActive);
+      btnStructured?.setAttribute("aria-pressed", isActive ? "true" : "false");
+
+      const label = $("schemaCurrentLabel");
+      if (label) {
+        label.textContent = schemaKey ? (schemaKey === "code_review" ? "Review" : (schemaKey === "action_plan" ? "Plan" : "JSON")) : "JSON";
+      }
+      schemaDropdown?.classList.add("hidden");
+      toast(schemaKey ? `🧩 Structured Output active: ${schemaKey}` : "Structured Output disabled (Standard freeform)");
+    });
+  });
+
+  // 4. Critic Answer Verification Toggle
+  const btnVerify = $("btnVerifyMode");
+  btnVerify?.addEventListener("click", () => {
+    stateModelIntelligence.verifyAnswer = !stateModelIntelligence.verifyAnswer;
+    btnVerify.classList.toggle("active", stateModelIntelligence.verifyAnswer);
+    btnVerify.setAttribute("aria-pressed", stateModelIntelligence.verifyAnswer ? "true" : "false");
+    toast(stateModelIntelligence.verifyAnswer ? "🛡️ Dual-Model Critic: ON (Audits facts & contradictions)" : "Critic Verification: OFF");
+  });
+
+  // Close dropdowns on click outside
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("#presetPickerWrap")) {
+      presetDropdown?.classList.add("hidden");
+    }
+    if (!e.target.closest("#schemaPickerWrap")) {
+      schemaDropdown?.classList.add("hidden");
+    }
+  });
+}
+
+async function populateComposerPresetsDropdown() {
+  const container = $("presetItemsList");
+  if (!container) return;
+  try {
+    const res = await api("/api/presets");
+    const presets = res.presets || [];
+    stateModelIntelligence.cachedPresets = presets;
+
+    container.innerHTML = presets.map(p => `
+      <button class="comp-popover-item ${stateModelIntelligence.activePresetId === p.id ? 'on' : ''}" data-id="${p.id}" type="button">
+        <div>
+          <strong>${esc(p.name)}</strong>
+          <span class="muted" style="font-size:0.68rem;display:block;">${esc(p.category)} · T:${p.temperature}</span>
+        </div>
+      </button>
+    `).join("");
+
+    container.querySelectorAll(".comp-popover-item").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const pId = btn.getAttribute("data-id");
+        const found = presets.find(x => x.id === pId);
+        if (found) {
+          stateModelIntelligence.activePresetId = found.id;
+          stateModelIntelligence.activePresetName = found.name;
+          if ($("presetCurrentLabel")) $("presetCurrentLabel").textContent = found.name.split(" ")[0];
+          $("btnGenPreset")?.classList.add("active");
+          $("presetDropdownMenu")?.classList.add("hidden");
+          toast(`🎛️ Preset applied: ${found.name} (T:${found.temperature})`);
+        }
+      });
+    });
+  } catch (e) {
+    container.innerHTML = `<div class="muted" style="padding:8px;">Failed to load presets</div>`;
+  }
+}
+
+function openModelIntelligenceModal(initialTab = "miTabMatrix") {
+  const modal = $("modelIntelligenceModal");
+  if (!modal) return;
+  modal.classList.remove("hidden");
+
+  // Activate tab
+  const tabBtn = modal.querySelector(`.mi-tabs-bar .k-tab-btn[data-tab="${initialTab}"]`);
+  if (tabBtn) tabBtn.click();
+  else loadModelProfilesMatrix();
+}
+
+function closeModelIntelligenceModal() {
+  $("modelIntelligenceModal")?.classList.add("hidden");
+}
+
+async function loadModelProfilesMatrix(forceRefresh = false) {
+  const container = $("miProfilesGrid");
+  if (!container) return;
+  if (!forceRefresh && stateModelIntelligence.cachedProfiles.length > 0) {
+    renderModelProfilesMatrix();
+    return;
+  }
+  container.innerHTML = `<div class="muted" style="padding:32px;text-align:center;">Scanning and auditing local model capabilities…</div>`;
+  try {
+    const res = await api("/api/models/profiles");
+    stateModelIntelligence.cachedProfiles = res.profiles || [];
+    renderModelProfilesMatrix();
+  } catch (err) {
+    container.innerHTML = `<div class="danger" style="padding:24px;text-align:center;">Error loading capability profiles: ${esc(err.message)}</div>`;
+  }
+}
+
+function renderModelProfilesMatrix(filterText = "") {
+  const container = $("miProfilesGrid");
+  if (!container) return;
+  let list = stateModelIntelligence.cachedProfiles || [];
+  if (filterText) {
+    list = list.filter(p =>
+      p.model_name.toLowerCase().includes(filterText) ||
+      p.family.toLowerCase().includes(filterText) ||
+      (p.recommended_tasks || []).some(t => t.toLowerCase().includes(filterText))
+    );
+  }
+
+  if (list.length === 0) {
+    container.innerHTML = `<div class="muted" style="padding:32px;text-align:center;grid-column:1/-1;">No models match your filter.</div>`;
+    return;
+  }
+
+  container.innerHTML = list.map(p => {
+    const thinkingTag = p.supports_thinking ? `<span class="badge" style="background:rgba(56,189,248,0.15);color:#38bdf8;">🧠 Reasoning</span>` : `<span class="badge muted">Direct</span>`;
+    const visionTag = p.supports_vision ? `<span class="badge" style="background:rgba(168,85,247,0.15);color:#c084fc;">👁️ Vision</span>` : ``;
+    const toolsTag = p.supports_tools ? `<span class="badge" style="background:rgba(74,222,128,0.15);color:#4ade80;">🛠️ Tools</span>` : ``;
+
+    const tasks = (p.recommended_tasks || []).map(t => `<span class="mi-task-tag active">${esc(t.toUpperCase())}</span>`).join(" ");
+
+    return `
+      <div class="mi-profile-card">
+        <div class="mi-profile-head">
+          <div>
+            <div class="mi-profile-title">${esc(p.model_name)}</div>
+            <span class="muted" style="font-size:0.75rem;">${esc(p.family)} · ${esc(p.parameter_size || 'N/A')}</span>
+          </div>
+          <span class="mi-spec-pill">${esc(p.quantization || 'Q4')}</span>
+        </div>
+
+        <div class="mi-profile-meta-grid">
+          <div class="mi-meta-item">
+            <span class="mi-meta-label">Context Window</span>
+            <span class="mi-meta-val">${(p.context_length / 1024).toFixed(0)}k tokens</span>
+          </div>
+          <div class="mi-meta-item">
+            <span class="mi-meta-label">VRAM Estimate</span>
+            <span class="mi-meta-val">~${(p.vram_estimate_mb / 1024).toFixed(1)} GB</span>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+          ${thinkingTag}
+          ${visionTag}
+          ${toolsTag}
+        </div>
+
+        <div style="border-top:1px solid var(--border-subtle);padding-top:8px;">
+          <span class="mi-meta-label" style="display:block;margin-bottom:4px;">Recommended Task Affinities:</span>
+          <div class="mi-tag-row">${tasks || '<span class="mi-task-tag">General</span>'}</div>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+async function loadRouterHeadroom() {
+  const details = $("miHeadroomDetails");
+  const affList = $("miRoutingAffinitiesList");
+  try {
+    const res = await api("/api/router/headroom");
+    const h = res.headroom || {};
+    if (details) {
+      if (h.gpu_available) {
+        details.textContent = `NVIDIA GPU: ${h.vram_used_mb} / ${h.vram_total_mb} MB VRAM (${h.vram_percent}% used) · ${h.vram_free_mb} MB Free · ${h.loaded_models.length} Model(s) in VRAM`;
+      } else {
+        details.textContent = `CPU/RAM Mode · ${h.loaded_models.length} Model(s) loaded in memory`;
+      }
+    }
+
+    if (affList) {
+      const affinities = [
+        { task: "Coding & Architecture", signal: "Functions, regex, git, syntax keywords", best: "qwen2.5-coder / deepseek-coder" },
+        { task: "Deep Research & Reasoning", signal: "Analysis, citations, comparative proofs", best: "deepseek-r1 / qwq / reasoning" },
+        { task: "Creative Storytelling", signal: "Narrative prose, novel, dialog, fantasy lore", best: "Qwen3.5-uncensored / mythomax / muse" },
+        { task: "Multimodal Vision", signal: "Images attached, screenshot debugging", best: "llava / llama3.2-vision / minicpm" },
+        { task: "Structured Extraction", signal: "JSON schema formatting, entity extraction", best: "qwen2.5 / llama3.1 with format:json" },
+        { task: "Fast Lookups & Q&A", signal: "Short queries (<70 chars), definitions", best: "llama3.2:3b / qwen:1.8b (instant TTFT)" }
+      ];
+
+      affList.innerHTML = affinities.map(a => `
+        <div class="mi-affinity-item">
+          <div>
+            <strong>${esc(a.task)}</strong>
+            <span class="muted" style="display:block;font-size:0.7rem;">Signal: ${esc(a.signal)}</span>
+          </div>
+          <span class="badge" style="background:rgba(56,189,248,0.12);color:#38bdf8;">${esc(a.best)}</span>
+        </div>
+      `).join("");
+    }
+  } catch (e) {
+    if (details) details.textContent = "Error reading hardware headroom: " + e.message;
+  }
+}
+
+async function loadGenerationPresets() {
+  const container = $("miPresetsGrid");
+  if (!container) return;
+  try {
+    const res = await api("/api/presets");
+    const presets = res.presets || [];
+    stateModelIntelligence.cachedPresets = presets;
+
+    container.innerHTML = presets.map(p => `
+      <div class="mi-preset-card">
+        <div class="mi-preset-card-head">
+          <div>
+            <strong>${esc(p.name)}</strong>
+            <span class="badge" style="font-size:0.65rem;margin-left:6px;">${esc(p.category)}</span>
+          </div>
+          ${p.is_builtin ? '<span class="badge muted">Built-In</span>' : `<button type="button" class="ghost-xs danger btn-del-preset" data-id="${p.id}">✕</button>`}
+        </div>
+        <p class="muted" style="font-size:0.75rem;margin:2px 0 6px;">${esc(p.description || 'No description.')}</p>
+        <div style="font-size:0.72rem;display:grid;grid-template-columns:1fr 1fr;gap:4px;color:var(--text-dim);">
+          <div>Temp: <strong style="color:var(--text);">${p.temperature}</strong></div>
+          <div>Top-P: <strong style="color:var(--text);">${p.top_p}</strong></div>
+          <div>Penalties: <strong style="color:var(--text);">${p.presence_penalty}/${p.frequency_penalty}</strong></div>
+          <div>Thinking: <strong style="color:var(--text);">${p.thinking_level}</strong></div>
+        </div>
+      </div>
+    `).join("");
+
+    container.querySelectorAll(".btn-del-preset").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const pid = btn.getAttribute("data-id");
+        if (confirm("Delete this custom generation preset?")) {
+          try {
+            await api(`/api/presets/${pid}`, { method: "DELETE" });
+            toast("Preset deleted ✓");
+            loadGenerationPresets();
+          } catch (err) {
+            toast("Error deleting preset: " + err.message, true);
+          }
+        }
+      });
+    });
+  } catch (e) {
+    container.innerHTML = `<div class="muted" style="padding:24px;text-align:center;">Failed to load presets: ${esc(e.message)}</div>`;
+  }
+}
+
+async function loadDebuggerRecords() {
+  const container = $("miDebuggerRecordsList");
+  if (!container) return;
+  try {
+    const res = await api("/api/debugger/records?limit=50");
+    const records = res.records || [];
+    if (records.length === 0) {
+      container.innerHTML = `<div class="muted" style="padding:16px;text-align:center;">No requests logged yet. Transmit a chat prompt to inspect.</div>`;
+      return;
+    }
+
+    container.innerHTML = records.map(r => `
+      <div class="mi-record-item ${stateModelIntelligence.selectedRecordId === r.id ? 'active' : ''}" data-id="${r.id}">
+        <div class="mi-record-head">
+          <strong style="color:#38bdf8;">${esc(r.effective_model)}</strong>
+          <span class="muted">${(r.created_at || '').slice(11, 19)}</span>
+        </div>
+        <div class="mi-record-preview">${esc(r.response_preview || 'Response')}</div>
+        <div style="display:flex;gap:6px;font-size:0.65rem;color:var(--text-muted);margin-top:2px;">
+          <span>~${r.context_tokens_est} tok</span>
+          <span>·</span>
+          <span>${r.duration_ms}ms</span>
+          <span>·</span>
+          <span style="color:#facc15;">${esc(r.task_type)}</span>
+        </div>
+      </div>
+    `).join("");
+
+    container.querySelectorAll(".mi-record-item").forEach(item => {
+      item.addEventListener("click", () => {
+        container.querySelectorAll(".mi-record-item").forEach(i => i.classList.remove("active"));
+        item.classList.add("active");
+        const reqId = item.getAttribute("data-id");
+        stateModelIntelligence.selectedRecordId = reqId;
+        loadDebuggerRecordDetail(reqId);
+      });
+    });
+
+    if (!stateModelIntelligence.selectedRecordId && records.length > 0) {
+      container.querySelector(".mi-record-item")?.click();
+    }
+  } catch (e) {
+    container.innerHTML = `<div class="muted" style="padding:16px;">Failed to load records: ${esc(e.message)}</div>`;
+  }
+}
+
+async function loadDebuggerRecordDetail(reqId) {
+  const inspector = $("miDebuggerInspector");
+  if (!inspector) return;
+  inspector.innerHTML = `<div class="muted" style="padding:24px;text-align:center;">Fetching prompt inspection payload…</div>`;
+  try {
+    const res = await api(`/api/debugger/records/${reqId}`);
+    const rec = res.record;
+    if (!rec) throw new Error("Record not found");
+
+    const messages = rec.messages || [];
+    const options = rec.options || {};
+
+    const systemMsgs = messages.filter(m => m.role === "system");
+    const userMsgs = messages.filter(m => m.role === "user");
+
+    inspector.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:10px;border-bottom:1px solid var(--border-subtle);">
+        <div>
+          <strong style="font-size:1.05rem;color:#c084fc;">Request #${esc(rec.id)}</strong>
+          <span class="muted" style="font-size:0.75rem;display:block;">${esc(rec.created_at)} · Effective Model: <strong>${esc(rec.effective_model)}</strong></span>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <span class="badge" style="background:rgba(250,204,21,0.15);color:#facc15;">${esc(rec.task_type.toUpperCase())}</span>
+          <span class="badge">${rec.duration_ms}ms</span>
+          <span class="badge">~${rec.context_tokens_est} tok</span>
+        </div>
+      </div>
+
+      <div class="mi-debug-section">
+        <div class="mi-debug-section-head">Task Routing &amp; Rationale</div>
+        <div style="font-size:0.8rem;color:var(--text);">${esc(rec.routing_rationale || 'Direct model invocation without automated routing.')}</div>
+      </div>
+
+      <div class="mi-debug-section">
+        <div class="mi-debug-section-head">Prompt Layer Breakdown</div>
+        <div style="font-size:0.78rem;display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+          <div>System Prompt Length: <strong>${rec.system_prompt_chars} chars</strong></div>
+          <div>Memories Injected: <strong>${rec.memories_injected_count} bullet(s)</strong></div>
+          <div>FTS5 Knowledge Injected: <strong>${rec.fts_docs_injected_count} doc passage(s)</strong></div>
+          <div>Total Context Messages: <strong>${messages.length}</strong></div>
+        </div>
+      </div>
+
+      <div class="mi-debug-section">
+        <div class="mi-debug-section-head">Generation Options (Hyperparameters)</div>
+        <div class="mi-debug-code">${esc(JSON.stringify(options, null, 2))}</div>
+      </div>
+
+      <div class="mi-debug-section">
+        <div class="mi-debug-section-head">Assembled System Prompts (Exact Text)</div>
+        <div class="mi-debug-code">${esc(systemMsgs.map(m => m.content).join("\n\n---\n\n") || 'None')}</div>
+      </div>
+
+      <div class="mi-debug-section">
+        <div class="mi-debug-section-head">Full Messages Array Transmitted to LLM</div>
+        <div class="mi-debug-code">${esc(JSON.stringify(messages, null, 2))}</div>
+      </div>
+
+      ${rec.thinking_full ? `
+        <div class="mi-debug-section">
+          <div class="mi-debug-section-head" style="color:#c084fc;">Internal Reasoning Scratchpad (&lt;think&gt;)</div>
+          <div class="mi-debug-code" style="color:#e9d5ff;">${esc(rec.thinking_full)}</div>
+        </div>
+      ` : ''}
+
+      ${rec.verification_critique ? `
+        <div class="mi-debug-section">
+          <div class="mi-debug-section-head" style="color:#4ade80;">Critic Verification Audit</div>
+          <div class="mi-debug-code" style="color:#bbf7d0;">${esc(rec.verification_critique)}</div>
+        </div>
+      ` : ''}
+    `;
+  } catch (err) {
+    inspector.innerHTML = `<div class="danger" style="padding:24px;text-align:center;">Error inspecting record: ${esc(err.message)}</div>`;
+  }
+}
+
+function renderMessageRoutingBadge(bubbleEl, routingInfo) {
+  const tsLine = bubbleEl.querySelector(".msg-ts");
+  if (!tsLine) return;
+  const badge = document.createElement("span");
+  badge.className = "msg-routing-badge";
+  badge.innerHTML = `⚡ ${esc(routingInfo.task_type.toUpperCase())} → ${esc(routingInfo.model)}`;
+  badge.title = routingInfo.rationale || "Auto-routed by Task Classifier";
+  tsLine.appendChild(badge);
+}
+
+function renderMessageVerificationCard(bubbleEl, critiqueText, score) {
+  const card = document.createElement("div");
+  card.className = "msg-verification-card";
+  const scoreBadge = score ? `<span class="badge" style="background:rgba(74,222,128,0.2);color:#4ade80;font-weight:700;">${score}% CONFIDENCE</span>` : ``;
+
+  card.innerHTML = `
+    <div class="msg-verification-head">
+      <span>🛡️ Critic Verification Audit</span>
+      ${scoreBadge}
+    </div>
+    <div class="msg-verification-body">
+      ${critiqueText.replace(/\n/g, '<br>')}
+    </div>
+  `;
+  bubbleEl.appendChild(card);
 }
 
 boot();

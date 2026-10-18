@@ -266,6 +266,21 @@
                 <span>Repository explorer, live diffs, test runner &amp; patch lab</span>
               </div>
             </button>
+            <button class="workbench-menu-item" type="button" id="wbItemModelIntelligence">
+              <span class="wb-item-icon wb-icon-purple">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+              </span>
+              <div class="wb-item-info">
+                <div class="wb-item-title-row">
+                  <strong>Model Intelligence</strong>
+                  <span class="wb-badge wb-badge-purple">ROUTER &amp; DEBUGGER</span>
+                </div>
+                <span>Task router, presets, structured JSON &amp; prompt debugger</span>
+              </div>
+            </button>
           </div>
           <div class="workbench-dropdown-divider"></div>
           <div class="workbench-dropdown-section">
@@ -532,6 +547,51 @@
                     <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
                   </svg>
                   <span class="web-active-pip"></span>
+                </button>
+
+                <!-- Model Router Chip -->
+                <button id="btnAutoRoute" class="comp-btn comp-btn-router" type="button" title="Toggle Task-Based Auto-Route (Routes Coding, Research, Creative, Fast Q&A)" aria-pressed="false">
+                  <span class="comp-icon-bolt">⚡</span>
+                  <span id="autoRouteLabel" class="comp-btn-text">Router</span>
+                  <span id="autoRoutePip" class="router-active-pip"></span>
+                </button>
+
+                <!-- Generation Preset Picker -->
+                <div class="comp-dropdown-wrap" id="presetPickerWrap">
+                  <button id="btnGenPreset" class="comp-btn comp-btn-preset" type="button" title="Select Generation Parameter Preset">
+                    <span class="comp-icon-sliders">🎛️</span>
+                    <span id="presetCurrentLabel" class="comp-btn-text">Balanced</span>
+                  </button>
+                  <div id="presetDropdownMenu" class="comp-popover-menu hidden">
+                    <div class="comp-popover-header">Generation Presets</div>
+                    <div id="presetItemsList" class="comp-popover-list"></div>
+                  </div>
+                </div>
+
+                <!-- Structured JSON Schema Picker -->
+                <div class="comp-dropdown-wrap" id="schemaPickerWrap">
+                  <button id="btnStructuredMode" class="comp-btn comp-btn-schema" type="button" title="Structured JSON Output Mode" aria-pressed="false">
+                    <span class="comp-icon-json">{ }</span>
+                    <span id="schemaCurrentLabel" class="comp-btn-text">JSON</span>
+                    <span id="schemaActivePip" class="schema-active-pip"></span>
+                  </button>
+                  <div id="schemaDropdownMenu" class="comp-popover-menu hidden">
+                    <div class="comp-popover-header">Structured Output Schema</div>
+                    <div class="comp-popover-list" id="schemaItemsList">
+                      <button class="comp-popover-item on" data-schema="" type="button">Standard Freeform (Off)</button>
+                      <button class="comp-popover-item" data-schema="code_review" type="button">🔍 Code Review &amp; Audit</button>
+                      <button class="comp-popover-item" data-schema="entity_extraction" type="button">🧩 Entity &amp; Topic Extraction</button>
+                      <button class="comp-popover-item" data-schema="action_plan" type="button">📋 Step-by-Step Action Plan</button>
+                      <button class="comp-popover-item" data-schema="summary_card" type="button">📌 Executive Summary Card</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Dual-Model Critic Verification -->
+                <button id="btnVerifyMode" class="comp-btn comp-btn-verify" type="button" title="Toggle Dual-Model Critic Verification (Audits claims & hallucinations)" aria-pressed="false">
+                  <span class="comp-icon-shield">🛡️</span>
+                  <span class="comp-btn-text">Critic</span>
+                  <span id="verifyActivePip" class="verify-active-pip"></span>
                 </button>
                 
                 <div class="model-picker-wrap" id="modelPickerWrap">
@@ -3068,6 +3128,201 @@
   </div>
 </div>
 
+<!-- Model Intelligence, Router, Presets & Prompt Debugger Modal -->
+<div id="modelIntelligenceModal" class="veil hidden">
+  <div class="modal-card mi-modal-card">
+    <div class="modal-head">
+      <div class="modal-title-wrap">
+        <span class="skills-title-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+        </span>
+        <div>
+          <h3>Model Intelligence &amp; Prompt Debugger</h3>
+          <span class="muted" style="font-size:0.75rem;">Capability Profiles · Task Router · Generation Presets · Prompt Debugger</span>
+        </div>
+      </div>
+      <button class="ghost closeBtn" id="btnCloseModelIntelligenceModal">✕</button>
+    </div>
+
+    <!-- 4 Tabs Bar -->
+    <div class="k-tabs-bar mi-tabs-bar">
+      <button type="button" class="k-tab-btn active" data-tab="miTabMatrix">
+        <span>🧩 Capability Matrix</span>
+      </button>
+      <button type="button" class="k-tab-btn" data-tab="miTabRouter">
+        <span>⚡ Task Router &amp; VRAM</span>
+      </button>
+      <button type="button" class="k-tab-btn" data-tab="miTabPresets">
+        <span>🎛️ Generation Presets</span>
+      </button>
+      <button type="button" class="k-tab-btn" data-tab="miTabDebugger">
+        <span>🔍 Prompt Debugger</span>
+      </button>
+    </div>
+
+    <!-- Modal Content Panels -->
+    <div class="modal-body mi-modal-body">
+      <!-- Tab 1: Capability Matrix -->
+      <div id="miTabMatrix" class="mi-tab-pane active">
+        <div class="mi-toolbar">
+          <div class="mi-search-wrap">
+            <input type="text" id="miMatrixSearch" placeholder="Filter models by name, family, task (e.g. coding, vision)...">
+          </div>
+          <button type="button" id="btnRefreshProfiles" class="cyber-btn ghost-sm">Refresh Profiles ↺</button>
+        </div>
+        <div id="miProfilesGrid" class="mi-profiles-grid">
+          <div class="muted" style="padding:32px;text-align:center;">Scanning model capabilities...</div>
+        </div>
+      </div>
+
+      <!-- Tab 2: Task Router & VRAM Scheduler -->
+      <div id="miTabRouter" class="mi-tab-pane hidden">
+        <!-- VRAM Headroom Bar -->
+        <div class="mi-headroom-banner" id="miHeadroomBanner">
+          <div class="mi-headroom-info">
+            <span class="headroom-icon">⚡</span>
+            <div>
+              <strong>Hardware Headroom &amp; VRAM Guard</strong>
+              <div id="miHeadroomDetails" class="muted" style="font-size:0.75rem;">Loading VRAM status...</div>
+            </div>
+          </div>
+          <div class="mi-headroom-actions">
+            <button type="button" id="btnMiEjectIdle" class="cyber-btn ghost-sm danger">Evict Idle Models ⚡</button>
+          </div>
+        </div>
+
+        <!-- Interactive Task Routing Sandbox -->
+        <div class="mi-router-sandbox-card">
+          <div class="sandbox-title">Task Classifier &amp; Model Routing Sandbox</div>
+          <p class="muted" style="font-size:0.8rem;margin:4px 0 12px;">Type a sample prompt to test real-time task category classification and model affinity routing.</p>
+          <textarea id="miRouterTestPrompt" rows="3" placeholder="e.g. 'Write a Python function to parse JSON with regex and tests' or 'Write a fantasy battle scene'"></textarea>
+          <div class="row-btns" style="margin-top:8px;justify-content:space-between;align-items:center;">
+            <div id="miRouterTestResult" class="mi-router-result-pill hidden">
+              <span id="miRouterResultTag" class="badge">CODING (95%)</span>
+              <span id="miRouterResultModel" class="bold">qwen2.5-coder:7b</span>
+            </div>
+            <button type="button" id="btnMiTestRoute" class="cyber-btn primary-cyan">Classify &amp; Route ↵</button>
+          </div>
+        </div>
+
+        <!-- Task Routing Rules Table -->
+        <div class="mi-routing-rules-box">
+          <div class="sandbox-title" style="margin-bottom:8px;">Active Model Affinities by Task Category</div>
+          <div id="miRoutingAffinitiesList" class="mi-affinities-list"></div>
+        </div>
+      </div>
+
+      <!-- Tab 3: Generation Presets -->
+      <div id="miTabPresets" class="mi-tab-pane hidden">
+        <div class="mi-toolbar">
+          <div style="flex:1;">
+            <strong>Reusable Parameter Presets</strong>
+            <div class="muted" style="font-size:0.75rem;">Fine-tune temperature, top-p, penalties, and reasoning limits.</div>
+          </div>
+          <button type="button" id="btnCreatePreset" class="cyber-btn ghost-sm">+ New Custom Preset</button>
+        </div>
+
+        <!-- Preset Editor Form (Collapsible) -->
+        <div id="miPresetForm" class="mi-preset-form-card hidden">
+          <div class="mi-form-row">
+            <div class="form-group flex-1">
+              <label>Preset Name:</label>
+              <input type="text" id="miPresetNameInput" placeholder="e.g. Strict Deterministic Code">
+            </div>
+            <div class="form-group flex-1">
+              <label>Category:</label>
+              <select id="miPresetCatSelect">
+                <option value="general">General</option>
+                <option value="coding">Coding &amp; Architecture</option>
+                <option value="research">Research &amp; Analysis</option>
+                <option value="creative">Creative &amp; Storytelling</option>
+                <option value="fast_qa">Fast Q&amp;A</option>
+                <option value="structured">Structured JSON</option>
+              </select>
+            </div>
+          </div>
+          <div class="mi-form-row">
+            <div class="form-group flex-1">
+              <label>Temperature (<span id="miValTemp">0.7</span>):</label>
+              <input type="range" id="miSliderTemp" min="0" max="1.5" step="0.05" value="0.7">
+            </div>
+            <div class="form-group flex-1">
+              <label>Top-P (<span id="miValTopP">0.9</span>):</label>
+              <input type="range" id="miSliderTopP" min="0.1" max="1.0" step="0.05" value="0.9">
+            </div>
+          </div>
+          <div class="mi-form-row">
+            <div class="form-group flex-1">
+              <label>Presence Penalty (<span id="miValPres">0.0</span>):</label>
+              <input type="range" id="miSliderPres" min="0" max="1.5" step="0.1" value="0.0">
+            </div>
+            <div class="form-group flex-1">
+              <label>Frequency Penalty (<span id="miValFreq">0.0</span>):</label>
+              <input type="range" id="miSliderFreq" min="0" max="1.5" step="0.1" value="0.0">
+            </div>
+          </div>
+          <div class="mi-form-row">
+            <div class="form-group flex-1">
+              <label>Max Predict Tokens:</label>
+              <input type="number" id="miNumPredictInput" value="4096" min="256" max="32768" step="256">
+            </div>
+            <div class="form-group flex-1">
+              <label>Thinking Level:</label>
+              <select id="miThinkingLevelSelect">
+                <option value="off">Off (Direct Output)</option>
+                <option value="low">Low (Concise reasoning)</option>
+                <option value="balanced" selected>Balanced</option>
+                <option value="deep">Deep (Multi-step verification)</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Description:</label>
+            <input type="text" id="miPresetDescInput" placeholder="Brief rationale for this preset...">
+          </div>
+          <div class="row-btns" style="justify-content:flex-end;margin-top:10px;">
+            <button type="button" id="btnCancelPresetForm" class="ghost-sm">Cancel</button>
+            <button type="button" id="btnSavePreset" class="cyber-btn primary-cyan">Save Preset</button>
+          </div>
+        </div>
+
+        <!-- Presets Grid -->
+        <div id="miPresetsGrid" class="mi-presets-grid"></div>
+      </div>
+
+      <!-- Tab 4: Prompt Debugger & Request Logs -->
+      <div id="miTabDebugger" class="mi-tab-pane hidden">
+        <div class="mi-debugger-split">
+          <!-- Left: Request History List -->
+          <div class="mi-debugger-sidebar">
+            <div class="mi-debugger-list-head">
+              <strong>Recent Inferences</strong>
+              <button type="button" id="btnRefreshDebugger" class="ghost-xs">↺</button>
+            </div>
+            <div id="miDebuggerRecordsList" class="mi-debugger-records-list">
+              <div class="muted" style="padding:16px;text-align:center;">No requests logged yet.</div>
+            </div>
+          </div>
+
+          <!-- Right: Inspector View -->
+          <div class="mi-debugger-inspector" id="miDebuggerInspector">
+            <div class="mi-inspector-placeholder">Select a request from the left to inspect exact prompt assembly, system instructions, memories, and generation telemetry.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Footer -->
+    <div class="modal-footer">
+      <span id="miFooterMsg" class="muted" style="flex:1;font-size:0.75rem;"></span>
+      <button id="btnDismissModelIntelligenceModal" class="ghost" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
 <div id="toasts"></div>
 <div id="confirmVeil" class="veil hidden">
   <div class="veil-card">
@@ -3076,6 +3331,6 @@
   </div>
 </div>
 
-<script src="/static/app.js?v=5.5"></script>
+<script src="/static/app.js?v=5.6"></script>
 </body>
 </html>
