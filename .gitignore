@@ -1,0 +1,20 @@
+# runtime data
+chatbots.db
+chatbots.db-*
+uploads/
+tts_cache/
+tts_models/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+
+# books (downloaded binaries)
+books/*.bin
+
+# prototypes / scratch
+prototypes/
+
+# os
+.DS_Store

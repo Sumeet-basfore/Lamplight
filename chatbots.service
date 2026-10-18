@@ -1,0 +1,13 @@
+[Unit]
+Description=ChatBots personal chat shell
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/sumeet/ChatBots
+ExecStart=/home/sumeet/ChatBots/.venv/bin/python -m uvicorn app:app --host 0.0.0.0 --port 8123
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

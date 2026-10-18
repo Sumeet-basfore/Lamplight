@@ -1,0 +1,2007 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lamplight — personal chat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Outfit:wght@300;400;500;600;700;800&family=Syne:wght@700;800&family=Silkscreen&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css?v=4.5">
+<script src="/static/mermaid.min.js"></script>
+</head>
+<body>
+<!-- Ambient Diffused Glow Orbs behind Smoked Glass -->
+<div class="ambient-orb orb-1"></div>
+<div class="ambient-orb orb-2"></div>
+<div class="glow" aria-hidden="true"></div>
+
+<div id="gate" class="veil hidden">
+  <div class="veil-card">
+    <div class="brand"><span class="flame"></span>Lamplight</div>
+    <h1>18+ only</h1>
+    <p>This shelf holds an uncensored local NSFW bot. Everything stays on this machine. Confirm you are 18 or older to step in.</p>
+    <button id="btn18" class="primary">I am 18+ — continue</button>
+  </div>
+</div>
+
+<div id="lock" class="veil hidden">
+  <div class="veil-card lock-card glass-chassis">
+    <!-- Corner Hardware Micro-Bolts -->
+    <div class="bolt tl"></div>
+    <div class="bolt tr"></div>
+    <div class="bolt bl"></div>
+    <div class="bolt br"></div>
+
+    <div class="lock-header">
+      <div class="brand">
+        <span class="flame"></span>
+        <span class="brand-text">Lamplight</span>
+      </div>
+      <div class="lock-status-badge">
+        <span class="lock-badge-dot pulse"></span>
+        <span>SECURITY CHASSIS // ARMED</span>
+      </div>
+    </div>
+
+    <div class="lock-icon-wrap" aria-hidden="true">
+      <div class="lock-icon-glow"></div>
+      <svg class="lock-svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+      </svg>
+    </div>
+
+    <h1 class="lock-title">Terminal Locked</h1>
+    <p class="lock-subtitle">The lamp is dimmed. Enter your authorization passcode to decrypt session.</p>
+
+    <!-- PIN Visual Dots Indicator -->
+    <div id="lockPinDots" class="lock-pin-dots" aria-hidden="true">
+      <span class="pin-dot"></span>
+      <span class="pin-dot"></span>
+      <span class="pin-dot"></span>
+      <span class="pin-dot"></span>
+    </div>
+
+    <!-- Passcode Input Field with Show/Hide Toggle -->
+    <div class="lock-input-wrap">
+      <span class="lock-input-prefix">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg>
+      </span>
+      <input id="unlockCode" type="password" placeholder="Passcode…" autocomplete="current-password" inputmode="numeric" autofocus>
+      <button id="btnTogglePassVisibility" type="button" class="lock-toggle-eye" title="Toggle Passcode Visibility">
+        <svg id="eyeSvg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+          <circle cx="12" cy="12" r="3"></circle>
+        </svg>
+      </button>
+    </div>
+
+    <div id="lockErrorMsg" class="lock-error-msg hidden"></div>
+
+    <!-- Interactive Hardware Keypad Grid -->
+    <div class="lock-keypad" aria-label="Passcode keypad">
+      <button type="button" class="keypad-btn" data-key="1"><span>1</span></button>
+      <button type="button" class="keypad-btn" data-key="2"><span>2</span><small>ABC</small></button>
+      <button type="button" class="keypad-btn" data-key="3"><span>3</span><small>DEF</small></button>
+      <button type="button" class="keypad-btn" data-key="4"><span>4</span><small>GHI</small></button>
+      <button type="button" class="keypad-btn" data-key="5"><span>5</span><small>JKL</small></button>
+      <button type="button" class="keypad-btn" data-key="6"><span>6</span><small>MNO</small></button>
+      <button type="button" class="keypad-btn" data-key="7"><span>7</span><small>PQRS</small></button>
+      <button type="button" class="keypad-btn" data-key="8"><span>8</span><small>TUV</small></button>
+      <button type="button" class="keypad-btn" data-key="9"><span>9</span><small>WXYZ</small></button>
+      <button type="button" class="keypad-btn keypad-func" data-key="clear"><span class="func-label">CLR</span></button>
+      <button type="button" class="keypad-btn" data-key="0"><span>0</span></button>
+      <button type="button" class="keypad-btn keypad-func" data-key="backspace"><span>⌫</span></button>
+    </div>
+
+    <!-- Unlock Action Button -->
+    <button id="btnUnlock" class="primary lock-submit-btn" type="button">
+      <span>Decrypt &amp; Unlock</span>
+      <span class="btn-subtext">ENTER ↵</span>
+    </button>
+
+    <div class="lock-footer-telemetry">
+      <span>AES-256 SESSION HASH</span>
+      <span>•</span>
+      <span>LOCALHOST ONLY</span>
+    </div>
+  </div>
+</div>
+
+<!-- Master Hardware Glass Enclosure -->
+<main id="app" class="glass-chassis hidden">
+  <!-- Corner Hardware Micro-Bolts -->
+  <div class="bolt tl"></div>
+  <div class="bolt tr"></div>
+  <div class="bolt bl"></div>
+  <div class="bolt br"></div>
+
+  <!-- Top Smoked Glass Control Deck -->
+  <header class="glass-top-deck">
+    <div class="brand-stamp">
+      <div class="brand-title">
+        <button id="btnSessions" class="icon-btn" title="Toggle Sessions Cartridge Bay" aria-label="Toggle sessions cartridge bay">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="3" ry="3"></rect>
+            <line x1="9" y1="3" x2="9" y2="21"></line>
+          </svg>
+        </button>
+        <span class="brand-name-text">LAMPLIGHT</span>
+        <span class="spec-badge">CYBER-GLASS</span>
+      </div>
+      <span class="brand-caption" id="brandCaption">AIR-GAPPED NEURAL WORKSPACE // RTX 3050</span>
+    </div>
+
+    <!-- Frosted Cyber LCD Telemetry Box -->
+    <div class="cyber-lcd" title="Realtime GPU & Neural Telemetry">
+      <div class="lcd-unit">
+        <span class="lcd-label">VRAM UTIL</span>
+        <span class="lcd-value" id="lcdVram">4.82G / 5.8G</span>
+      </div>
+      <div class="lcd-unit">
+        <span class="lcd-label">THROUGHPUT</span>
+        <span class="lcd-value" id="lcdSpeed">41.8 TOK/S</span>
+      </div>
+      <div class="lcd-unit">
+        <span class="lcd-label">ACTIVE MODEL</span>
+        <span class="lcd-value" id="lcdModel">QWEN3.5-UNCENSORED</span>
+      </div>
+      <div class="lcd-unit">
+        <span class="lcd-label">REASONING</span>
+        <span class="lcd-value" id="lcdThinking">BALANCED</span>
+      </div>
+
+      <!-- Spring-Bouncing Kokoro Audio Equalizer Spectrum -->
+      <div class="fluid-spectrum" title="Kokoro Neural Voice Spectrum">
+        <div class="spectrum-bar"></div>
+        <div class="spectrum-bar"></div>
+        <div class="spectrum-bar"></div>
+        <div class="spectrum-bar"></div>
+        <div class="spectrum-bar"></div>
+        <div class="spectrum-bar"></div>
+      </div>
+    </div>
+
+    <!-- Modern Tactile Glass Rocker Switch Bank -->
+    <nav id="tabs" class="glass-rocker-bank" aria-label="Chat Mode">
+      <span id="tabGlow" class="hidden"></span>
+      <button data-mode="nsfw" class="glass-rocker-btn on" title="Uncensored private chat">
+        <div class="diode-led"></div>
+        <span>After Dark</span>
+      </button>
+      <button data-mode="friend" class="glass-rocker-btn" title="Memory-enabled friendly companion">
+        <div class="diode-led"></div>
+        <span>Friend</span>
+      </button>
+      <button data-mode="architect" class="glass-rocker-btn" title="Production-grade AI Systems Architect">
+        <div class="diode-led"></div>
+        <span>Architect</span>
+      </button>
+      <button data-mode="muse" class="glass-rocker-btn" title="Creative Writing, Story Bible & Socratic Plot Interrogator">
+        <div class="diode-led"></div>
+        <span>Muse</span>
+      </button>
+    </nav>
+
+    <!-- Quick Action Deck Controls -->
+    <div class="hbtns">
+      <!-- Unified AI Workbench Dropdown Launcher -->
+      <div class="workbench-dropdown-wrap">
+        <button id="btnWorkbenchMenu" class="h-action-btn workbench-trigger" type="button" title="AI Workbench, Labs & Playgrounds" aria-haspopup="true" aria-expanded="false">
+          <svg class="h-btn-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+            <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+          </svg>
+          <span class="h-btn-label">Workbench</span>
+          <svg class="wb-arrow-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </button>
+
+        <div id="workbenchDropdown" class="workbench-dropdown-menu hidden" role="menu">
+          <div class="workbench-dropdown-section">
+            <span class="workbench-dropdown-header">Workspaces & Playgrounds</span>
+            <button class="workbench-menu-item" type="button" id="wbItemLab">
+              <span class="wb-item-icon">🔬</span>
+              <div class="wb-item-info">
+                <strong>Model Lab</strong>
+                <span>Comparative A/B benchmarks & speed races</span>
+              </div>
+            </button>
+            <button class="workbench-menu-item" type="button" id="wbItemArena">
+              <span class="wb-item-icon">⚔️</span>
+              <div class="wb-item-info">
+                <strong>AI Arena</strong>
+                <span>Stockfish chess, Council jury & debates</span>
+              </div>
+            </button>
+            <button class="workbench-menu-item" type="button" id="wbItemDocs">
+              <span class="wb-item-icon">📚</span>
+              <div class="wb-item-info">
+                <strong>Document Hub</strong>
+                <span>Multi-PDF knowledge base, flashcards & quizzes</span>
+              </div>
+            </button>
+          </div>
+          <div class="workbench-dropdown-divider"></div>
+          <div class="workbench-dropdown-section">
+            <span class="workbench-dropdown-header">System Diagnostics & Presets</span>
+            <button class="workbench-menu-item" type="button" id="wbItemObservatory">
+              <span class="wb-item-icon">🔭</span>
+              <div class="wb-item-info">
+                <strong>Model Observatory</strong>
+                <span>GPU/VRAM telemetry, CPU/RAM & eviction</span>
+              </div>
+            </button>
+            <button class="workbench-menu-item" type="button" id="wbItemPrompts">
+              <span class="wb-item-icon">💡</span>
+              <div class="wb-item-info">
+                <strong>Prompt Library</strong>
+                <span>Reusable curated templates with dynamic variables</span>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Canvas Toggle -->
+      <button id="btnCanvas" class="h-action-btn" title="Toggle Interactive Canvas Workspace">
+        <svg class="h-btn-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+          <line x1="14" y1="3" x2="14" y2="21"></line>
+        </svg>
+        <span class="h-btn-label">Canvas</span>
+      </button>
+
+      <!-- Skills / Slash Commands -->
+      <button id="btnSkills" class="h-action-btn" title="Skills & Commands (Type /)">
+        <svg class="h-btn-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+        </svg>
+        <span class="h-btn-label">Skills</span>
+      </button>
+
+      <!-- Friend Memory (Friend mode only) -->
+      <button id="btnMemory" class="h-action-btn hidden" title="Friend Companion Profile & Facts">
+        <svg class="h-btn-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7Z"></path>
+          <line x1="9" y1="21" x2="15" y2="21"></line>
+        </svg>
+        <span class="h-btn-label">Memory</span>
+      </button>
+
+      <!-- Architect Tech Stack & Project Memory (Architect mode only) -->
+      <button id="btnArchitectStack" class="h-action-btn hidden" title="Architect Project Stack & Technical Rules">
+        <svg class="h-btn-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+          <line x1="12" y1="22.08" x2="12" y2="12"></line>
+        </svg>
+        <span class="h-btn-label">Stack</span>
+      </button>
+
+      <!-- Muse Story Bible & World Lore (Muse mode only) -->
+      <button id="btnMuseBible" class="h-action-btn hidden" title="Muse Story Bible, Character Dossiers & World Lore">
+        <svg class="h-btn-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+          <line x1="9" y1="7" x2="15" y2="7"></line>
+          <line x1="9" y1="11" x2="13" y2="11"></line>
+        </svg>
+        <span class="h-btn-label">Bible</span>
+      </button>
+
+      <!-- Themes -->
+      <button id="btnThemes" class="h-action-btn icon-only" title="Color themes">
+        <svg class="h-btn-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"></circle>
+          <circle cx="17.5" cy="10.5" r=".5" fill="currentColor"></circle>
+          <circle cx="8.5" cy="7.5" r=".5" fill="currentColor"></circle>
+          <circle cx="6.5" cy="12.5" r=".5" fill="currentColor"></circle>
+          <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"></path>
+        </svg>
+      </button>
+
+      <!-- Models Settings & VRAM indicator -->
+      <button id="btnModels" class="h-action-btn" title="Model settings & VRAM Status">
+        <svg class="h-btn-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="4" y1="21" x2="4" y2="14"></line>
+          <line x1="4" y1="10" x2="4" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="12"></line>
+          <line x1="12" y1="8" x2="12" y2="3"></line>
+          <line x1="20" y1="21" x2="20" y2="16"></line>
+          <line x1="20" y1="12" x2="20" y2="3"></line>
+          <line x1="1" y1="14" x2="7" y2="14"></line>
+          <line x1="9" y1="8" x2="15" y2="8"></line>
+          <line x1="17" y1="16" x2="23" y2="16"></line>
+        </svg>
+        <span class="h-btn-label">Models</span>
+        <span id="vramHeaderBadge" class="vram-pill-header" title="Loaded VRAM">0 MB</span>
+      </button>
+
+      <!-- Hidden compatibility anchors for existing event bindings -->
+      <div style="display:none;" aria-hidden="true">
+        <button id="btnChess"></button>
+        <button id="btnLab"></button>
+        <button id="btnDocHub"></button>
+        <button id="btnObservatory"></button>
+        <button id="btnPrompts"></button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Master Workspace Split -->
+  <div id="workspace" class="workspace-split">
+    <!-- Left Persistent Cassette Cartridge Bay (Sessions Archive) -->
+    <aside id="sessionsPanel" class="glass-cartridge-bay">
+      <div class="bay-header">
+        <div class="bay-header-left">
+          <span class="bay-title" id="sessionDrawerHeading">SESSIONS ARCHIVE</span>
+        </div>
+        <button id="btnNewSession" class="btn-eject-cassette" type="button" title="Start new session">＋ New</button>
+      </div>
+      <div class="session-search-wrap">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="session-search-icon">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input id="sessionSearchInput" class="session-search-input" placeholder="Search archive..." autocomplete="off">
+      </div>
+      <div id="sessionList" class="cassette-list"></div>
+    </aside>
+
+    <!-- Central Frosted Chat Channel -->
+    <div id="chatPane" class="glass-chat-channel">
+      <div id="chatWrap" class="channel-scroll">
+        <div id="chat"></div>
+        <div id="dropOverlay" class="drop-overlay hidden">
+          <div class="drop-content">
+            <div class="drop-icon">📎</div>
+            <div class="drop-title">Drop files to attach</div>
+            <div class="drop-sub">PDFs, Word Docs, Code, Images & Markdown</div>
+          </div>
+        </div>
+        <button id="btnDown" class="hidden" title="Scroll to latest">↓</button>
+      </div>
+
+      <!-- Floating Smoked Glass Composer Dock -->
+      <div id="composer" class="glass-composer-dock">
+        <div class="composer-inner-wrap">
+          <!-- Floating Slash Command Popup Menu -->
+          <div id="slashMenu" class="slash-menu hidden" role="listbox" aria-label="Skills & Commands">
+            <div class="slash-menu-header">
+              <div class="slash-header-left">
+                <span class="slash-header-icon">⚡</span>
+                <span class="slash-header-title">Skills &amp; Commands</span>
+                <span id="slashFilterBadge" class="slash-filter-badge hidden"></span>
+              </div>
+              <button id="btnOpenSkillFromSlash" class="slash-create-btn" type="button" title="Create Custom Skill">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                <span>New Skill</span>
+              </button>
+            </div>
+            <div id="slashList" class="slash-menu-list"></div>
+            <div class="slash-menu-footer">
+              <span class="slash-footer-tip">Type <code>/</code> to search · <code>↑↓</code> navigate · <code>↵</code> select · <code>esc</code> close</span>
+            </div>
+          </div>
+
+          <!-- Active Skill Pill Bar -->
+          <div id="activeSkillBar" class="active-skill-bar hidden">
+            <div class="active-skill-pill">
+              <span id="activeSkillIcon" class="active-skill-icon">⚡</span>
+              <span id="activeSkillCmd" class="active-skill-cmd">/summarize</span>
+              <span id="activeSkillName" class="active-skill-name">Summarize &amp; Key Points</span>
+              <button id="btnClearSkill" type="button" class="active-skill-clear" title="Remove active skill">✕</button>
+            </div>
+          </div>
+
+          <div id="attachmentTray" class="attachment-tray hidden"></div>
+          <div id="recordingBar" class="recording-bar hidden">
+            <span class="rec-dot"></span>
+            <span class="rec-label">Listening…</span>
+            <div class="rec-vu-wrap" title="Live audio volume input">
+              <div id="recVuBar" class="rec-vu-fill"></div>
+            </div>
+            <span id="recTimer" class="rec-time">0:00</span>
+            <button id="btnMicTroubleshoot" type="button" class="rec-gear-btn" title="Microphone settings & diagnostics">⚙</button>
+            <button id="btnCancelRec" type="button" class="rec-cancel-btn" title="Cancel recording">✕</button>
+          </div>
+          
+          <div class="composer-frosted-box">
+            <textarea id="msg" rows="1" placeholder="Confer with model… (Shift+Enter for newline)"></textarea>
+            
+            <div class="composer-toolbar">
+              <div class="toolbar-left">
+                <input type="file" id="fileInput" multiple class="hidden" accept=".pdf,.docx,.doc,.txt,.md,.py,.js,.ts,.html,.css,.json,.csv,.xml,.sql,.c,.cpp,.h,.rs,.go,.java,.png,.jpg,.jpeg,.webp,.gif">
+                <button id="btnAttach" class="comp-btn" type="button" title="Attach document or image">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+                  </svg>
+                </button>
+                
+                <button id="btnSlash" class="comp-btn comp-btn-slash" type="button" title="Skills &amp; Commands (Type /)">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="17" y1="4" x2="7" y2="20"></line>
+                  </svg>
+                </button>
+                
+                <div class="model-picker-wrap" id="modelPickerWrap">
+                  <!-- Native select kept in sync for zero regressions -->
+                  <select id="msgModel" class="sr-only-model-select" title="Select model for reply" tabindex="-1" aria-hidden="true">
+                    <option value="">Default</option>
+                  </select>
+
+                  <!-- Animated Cyber-Glass Cartridge Trigger Pill -->
+                  <button type="button" class="cartridge-trigger-pill" id="cartridgeTriggerBtn" aria-haspopup="listbox" aria-expanded="false" title="Switch active neural model cartridge">
+                    <span class="cartridge-status-pip" id="cartridgePip"></span>
+                    <span class="cartridge-label-name" id="cartridgeName">Default</span>
+                    <span class="cartridge-spec-badge" id="cartridgeBadge">AUTO</span>
+                    <svg class="cartridge-chevron-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                  </button>
+
+                  <!-- Animated Cyber-Glass Floating Popover -->
+                  <div class="cartridge-popover hidden" id="modelPopover" role="listbox" aria-label="Available Neural Models">
+                    <div class="cartridge-popover-header">
+                      <div class="popover-header-left">
+                        <span class="popover-lcd-dot"></span>
+                        <span class="popover-title">NEURAL CORE MATRIX</span>
+                      </div>
+                      <span class="popover-count-tag" id="cartridgeCountTag">0 AVAILABLE</span>
+                    </div>
+                    <div class="cartridge-options-scroll" id="cartridgeOptionsScroll">
+                      <!-- Dynamically populated via app.js -->
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="toolbar-right">
+                <button id="btnErase" class="comp-btn comp-btn-danger" type="button" title="Erase chat history">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 6h18"></path>
+                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                  </svg>
+                </button>
+                
+                <button id="btnRegen" class="comp-btn" type="button" title="Regenerate last response">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+                    <path d="M21 3v5h-5"></path>
+                    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+                    <path d="M3 21v-5h5"></path>
+                  </svg>
+                </button>
+
+                <button id="btnAutoSpeak" class="comp-btn" type="button" title="Auto-speak bot replies (Off)">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+                  </svg>
+                </button>
+
+                <button id="btnMic" class="comp-btn" type="button" title="Voice dictation (Speech to Text)">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                    <line x1="12" y1="19" x2="12" y2="22"></line>
+                  </svg>
+                </button>
+
+                <button id="btnStop" class="comp-btn-stop hidden" type="button" title="Stop generating">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                    <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+                  </svg>
+                  <span>Stop</span>
+                </button>
+
+                <button id="btnSend" class="btn-glass-send" type="button" title="Send message">
+                  <span>Transmit ↵</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cyber-Glass Thinking Level & Telemetry Strip -->
+          <div class="composer-telemetry-row">
+            <div class="think-level-selector" id="thinkSelectorWrapper" title="Configure AI Reasoning / Scratchpad Depth">
+              <span class="think-micro-label">THINKING</span>
+              <div class="segmented-think-group" id="thinkingLevelGroup" role="radiogroup" aria-label="Thinking Level">
+                <button type="button" class="think-toggle-btn" data-level="off" title="Direct output without thinking tokens (Lowest latency)">Off</button>
+                <button type="button" class="think-toggle-btn" data-level="low" title="Concise scratchpad reasoning (Under 120 words)">Low</button>
+                <button type="button" class="think-toggle-btn active" data-level="balanced" title="Standard balanced reasoning">Balanced</button>
+                <button type="button" class="think-toggle-btn" data-level="deep" title="Deep multi-step reasoning, questioning assumptions & verifying logic">Deep</button>
+              </div>
+              <span class="think-support-badge supported" id="thinkSupportBadge" title="Model reasoning capability status">REASONING READY</span>
+            </div>
+
+            <div class="composer-micro-hud">
+              <span class="hud-stat" id="hudTokSpeed"><span class="hud-dot"></span> <span id="hudTokVal">42 tok/s</span></span>
+              <span class="hud-stat" id="hudVram"><span id="hudVramVal">4.8GB VRAM</span></span>
+              <span class="hud-stat privacy-tag">AIR-GAPPED // ZERO TELEMETRY</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Interactive Canvas & Artifact Workspace -->
+    <aside id="canvasPanel" class="canvas-panel hidden" aria-label="Interactive Canvas">
+      <div class="canvas-header">
+        <div class="canvas-header-left">
+          <span class="canvas-icon">🎨</span>
+          <div class="canvas-titles">
+            <input id="canvasTitle" class="canvas-title-input" value="Interactive Canvas" spellcheck="false" title="Click to rename artifact" />
+            <div class="canvas-meta">
+              <span id="canvasTypeBadge" class="canvas-badge">HTML</span>
+              <span id="canvasStatus" class="canvas-status">Ready</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="canvas-header-center">
+          <div class="canvas-view-toggle">
+            <button id="btnCanvasPreview" class="canvas-tab-btn on" type="button" title="Interactive Sandbox Preview">Preview</button>
+            <button id="btnCanvasCode" class="canvas-tab-btn" type="button" title="View Source Code">Code</button>
+          </div>
+          <div class="canvas-viewport-toggle" title="Device preview viewport">
+            <button id="btnViewportDesktop" class="canvas-viewport-btn on" type="button" title="Desktop Viewport (100%)">🖥️</button>
+            <button id="btnViewportTablet" class="canvas-viewport-btn" type="button" title="Tablet Viewport (768px)">📱</button>
+            <button id="btnViewportMobile" class="canvas-viewport-btn" type="button" title="Mobile Viewport (375px)">📲</button>
+          </div>
+        </div>
+
+        <div class="canvas-header-right">
+          <button id="btnCanvasRun" class="canvas-tool-btn" type="button" title="Re-run sandbox">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+          </button>
+          <button id="btnCanvasSaveVersion" class="canvas-tool-btn" type="button" title="Save snapshot checkpoint">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+              <polyline points="17 21 17 13 7 13 7 21"></polyline>
+              <polyline points="7 3 7 8 15 8"></polyline>
+            </svg>
+          </button>
+          <button id="btnCanvasHistory" class="canvas-tool-btn" type="button" title="Artifact version history">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 14 14"></polyline>
+            </svg>
+          </button>
+          <button id="btnCanvasConsole" class="canvas-tool-btn" type="button" title="Toggle sandbox console logs">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="4 17 10 11 4 5"></polyline>
+              <line x1="12" y1="19" x2="20" y2="19"></line>
+            </svg>
+          </button>
+          <button id="btnCanvasSyntax" class="canvas-tool-btn on" type="button" title="Toggle syntax highlighting">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="16 18 22 12 16 6"></polyline>
+              <polyline points="8 6 2 12 8 18"></polyline>
+            </svg>
+          </button>
+          <button id="btnCanvasCopy" class="canvas-tool-btn" type="button" title="Copy code">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+          </button>
+          <button id="btnCanvasDownload" class="canvas-tool-btn" type="button" title="Download single file">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+          </button>
+          <button id="btnCanvasExportZip" class="canvas-tool-btn" type="button" title="Export as ZIP project bundle">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+              <line x1="12" y1="22.08" x2="12" y2="12"></line>
+            </svg>
+          </button>
+          <button id="btnCanvasFullscreen" class="canvas-tool-btn" type="button" title="Toggle full-width canvas workspace">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+            </svg>
+          </button>
+          <button id="btnCanvasClose" class="canvas-tool-btn danger" type="button" title="Close Canvas">✕</button>
+        </div>
+      </div>
+
+      <div class="canvas-body">
+        <!-- Live Sandbox / Preview Pane with Device Viewport Wrapper -->
+        <div id="canvasPreviewView" class="canvas-view-pane">
+          <div id="canvasViewportWrap" class="canvas-viewport-wrap viewport-desktop">
+            <iframe id="canvasSandboxFrame" class="canvas-sandbox-frame" sandbox="allow-scripts allow-modals allow-forms"></iframe>
+          </div>
+
+          <!-- Sandbox Console Output Drawer -->
+          <div id="canvasConsoleDrawer" class="canvas-console-drawer hidden">
+            <div class="console-drawer-header">
+              <div class="console-title">
+                <span class="console-dot"></span>
+                <strong>Sandbox Console</strong>
+                <span id="canvasConsoleCount" class="console-count-badge">0 logs</span>
+              </div>
+              <div class="console-actions">
+                <button id="btnCanvasClearConsole" class="console-action-btn" type="button">Clear</button>
+                <button id="btnCloseConsoleDrawer" class="console-action-btn" type="button">✕</button>
+              </div>
+            </div>
+            <div id="canvasConsoleLogs" class="console-logs-list">
+              <div class="console-empty">No console messages yet.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Code & Line Numbers Pane -->
+        <div id="canvasCodeView" class="canvas-view-pane hidden">
+          <div class="canvas-editor-wrap">
+            <div id="canvasLineNumbers" class="canvas-line-numbers">1</div>
+            <div class="canvas-editor-stage">
+              <pre id="canvasCodeHighlight" class="canvas-highlight-layer" aria-hidden="true"><code id="canvasCodeHighlightInner"></code></pre>
+              <textarea id="canvasCodeArea" class="canvas-code-area" spellcheck="false" placeholder="Write or paste HTML, CSS, JavaScript, SVG, Mermaid, or Markdown here…"></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Canvas Artifact Version History Drawer -->
+      <div id="canvasSnapshotDrawer" class="canvas-snapshot-drawer hidden">
+        <div class="snapshot-drawer-header">
+          <div class="snapshot-title">
+            <span>📜</span>
+            <strong>Artifact Version History</strong>
+          </div>
+          <button id="btnCloseSnapshotDrawer" class="snapshot-close-btn" type="button">✕</button>
+        </div>
+        <div class="snapshot-actions-bar">
+          <button id="btnCreateSnapshotManual" class="snapshot-action-btn" type="button">+ Save Checkpoint</button>
+        </div>
+        <div id="canvasSnapshotList" class="snapshot-list"></div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Model Lab & Comparative Benchmarks Section -->
+  <section id="labView" class="hidden">
+    <div class="lab-header">
+      <div class="lab-header-left">
+        <span class="lab-brand-icon">🔬</span>
+        <div class="lab-title-wrap">
+          <h2>Model Lab &amp; Benchmarks</h2>
+          <span class="lab-subtitle">Side-by-side prompt testing, live speed (tokens/sec), latency, and blind evaluation</span>
+        </div>
+      </div>
+
+      <div class="lab-header-center">
+        <div class="lab-pill-group" title="Evaluation mode">
+          <button id="btnLabModeTransparent" class="lab-pill-btn on" type="button">Transparent</button>
+          <button id="btnLabModeBlind" class="lab-pill-btn" type="button">Blind Arena 🎭</button>
+        </div>
+
+        <div class="lab-pill-group" title="Execution strategy">
+          <button id="btnLabExecSeq" class="lab-pill-btn on" type="button" title="VRAM-Safe: Queues one model at a time, frees memory between runs">Sequential (VRAM-Safe)</button>
+          <button id="btnLabExecPar" class="lab-pill-btn" type="button" title="Parallel: Streams all candidate models concurrently">Parallel</button>
+        </div>
+      </div>
+
+      <div class="lab-header-right">
+        <button id="btnLabSuites" class="lab-btn ghost" type="button" title="Select pre-packaged benchmark suite">
+          <span>📚 Suites</span>
+          <span class="chevron">▾</span>
+        </button>
+        <button id="btnLabHistory" class="lab-btn ghost" type="button" title="View past benchmark runs">
+          <span>📜 History</span>
+        </button>
+        <button id="btnLabClose" class="lab-btn-close" type="button" title="Return to Chat">✕</button>
+      </div>
+    </div>
+
+    <!-- Benchmark Suite Picker Dropdown Menu -->
+    <div id="labSuitesMenu" class="lab-dropdown-menu hidden">
+      <div class="lab-menu-header">Standardized Benchmark Suites</div>
+      <div id="labSuitesList" class="lab-suites-list"></div>
+    </div>
+
+    <!-- Lab Controls & Composer -->
+    <div class="lab-controls-card">
+      <div class="lab-models-selector">
+        <div class="lab-models-label-row">
+          <label><strong>Candidate Models:</strong></label>
+          <span class="muted">(Compare 1 to 4 models on identical prompt)</span>
+        </div>
+        <div id="labModelsPickers" class="lab-pickers-row">
+          <!-- Dynamically populated model selector dropdowns -->
+        </div>
+      </div>
+
+      <div class="lab-prompt-wrap">
+        <textarea id="labPrompt" rows="3" placeholder="Enter benchmark prompt to test across models, or pick a standardized suite above…"></textarea>
+        <div class="lab-composer-footer">
+          <div class="lab-settings-inline">
+            <div class="lab-temp-group">
+              <span class="lab-temp-label">Temp</span>
+              <input id="labTempRange" class="lab-temp-slider" type="range" min="0" max="2" step="0.05" value="0.7">
+              <span id="labTempVal" class="lab-temp-val">0.70</span>
+              <input id="labTemp" type="hidden" value="0.7">
+            </div>
+            <span id="labActiveSuiteBadge" class="lab-suite-badge hidden">Custom</span>
+          </div>
+          <button id="btnLabRun" class="primary lab-run-btn" type="button">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            <span>Run Benchmark</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Benchmark Progress / Loading Status -->
+    <div id="labStatusNotice" class="lab-status-notice hidden">
+      <span class="lab-spinner">⏳</span>
+      <span id="labStatusText">Evaluating candidate models…</span>
+    </div>
+
+    <!-- Comparison Results Grid -->
+    <div id="labResultsGrid" class="lab-results-grid cols-2">
+      <!-- Empty state initially -->
+      <div class="lab-empty-state">
+        <span class="lab-empty-icon">⚖️</span>
+        <h3>Ready to Benchmark</h3>
+        <p>Select your candidate models, type or pick a prompt, and hit <strong>Run Benchmark</strong> to compare responses, tokens/sec, and latency side-by-side.</p>
+      </div>
+    </div>
+
+    <!-- History / Past Experiments Slide-Out Drawer -->
+    <div id="labHistoryDrawer" class="lab-history-drawer hidden">
+      <div class="lab-drawer-header">
+        <h3>Benchmark History &amp; Experiments</h3>
+        <button id="btnCloseLabHistory" class="ghost" type="button">✕</button>
+      </div>
+      <div id="labHistoryList" class="lab-history-list"></div>
+    </div>
+  </section>
+
+  <section id="chessView" class="hidden">
+    <!-- Arena Header & Sub-Arena Mode Switcher -->
+    <div class="arena-header">
+      <div class="arena-header-left">
+        <span class="arena-brand-icon">⚔️</span>
+        <div class="arena-title-wrap">
+          <h2>AI Arena</h2>
+          <span class="arena-subtitle">Stockfish Chess, Multi-Model Council Jury &amp; Adversarial Debates</span>
+        </div>
+      </div>
+      <div class="arena-header-center">
+        <div class="arena-pill-group">
+          <button id="btnArenaTabChess" class="arena-pill-btn on" type="button">♟️ Chess + Stockfish</button>
+          <button id="btnArenaTabCouncil" class="arena-pill-btn" type="button">🏛️ AI Council</button>
+          <button id="btnArenaTabDebate" class="arena-pill-btn" type="button">🥊 AI Debate</button>
+        </div>
+      </div>
+      <div class="arena-header-right">
+        <button id="btnArenaHistory" class="lab-btn ghost" type="button" title="View past Arena sessions">
+          <span>📜 History</span>
+        </button>
+        <button id="btnArenaClose" class="lab-btn-close" type="button" title="Return to Chat">✕</button>
+      </div>
+    </div>
+
+    <!-- Sub-Pane 1: Grandmaster Chess with Stockfish -->
+    <div id="arenaPaneChess" class="arena-pane">
+      <div id="chessModes">
+        <button id="btnModeWatch" class="on">Spectate</button>
+        <button id="btnModePlay">Play</button>
+        <select id="chessSide" class="hidden" title="Your side">
+          <option value="white">I play White</option>
+          <option value="black">I play Black</option>
+        </select>
+      </div>
+      <div id="chessTop">
+        <div id="fighterWhite" class="fighter-card w">
+          <div class="fighter-head">
+            <span class="botdot leaf"></span>
+            <span id="chessWhite" class="fighter-name">?</span>
+          </div>
+          <div id="trayWhite" class="captured-tray"></div>
+        </div>
+        <div id="chessScoreWrap">
+          <div id="chessScore" class="score-badge">vs</div>
+        </div>
+        <div id="fighterBlack" class="fighter-card b">
+          <div class="fighter-head">
+            <span id="chessBlack" class="fighter-name">?</span>
+            <span class="botdot rose"></span>
+          </div>
+          <div id="trayBlack" class="captured-tray"></div>
+        </div>
+      </div>
+      <div id="chessStatus">Loading…</div>
+      <div id="evalBar" title="Stockfish evaluation"><div id="evalWhite"></div><span id="evalText"></span></div>
+      <p id="chessReason" class="muted"></p>
+      <div id="boardWrap"><div id="board"></div></div>
+
+      <!-- Interactive Move Scrubber & Quick Tools Bar -->
+      <div id="chessScrubber" class="chess-scrubber-bar">
+        <div class="scrub-btn-group">
+          <button id="btnScrubStart" class="scrub-btn" type="button" title="Start of match">|◀</button>
+          <button id="btnScrubPrev" class="scrub-btn" type="button" title="Previous move">◀</button>
+          <button id="btnScrubNext" class="scrub-btn" type="button" title="Next move">▶</button>
+          <button id="btnScrubEnd" class="scrub-btn on" type="button" title="Current live board">▶|</button>
+        </div>
+        <div id="scrubStatusText" class="scrub-status-pill">Live Position</div>
+        <div class="scrub-actions-right">
+          <button id="btnStockfishDeep" class="ghost scrub-analyze-btn" type="button" title="Stockfish depth-16 analysis">🧠 Analysis</button>
+          <button id="btnChessExportPgn" class="ghost scrub-pgn-btn" type="button" title="Export standard PGN notation">📥 PGN</button>
+        </div>
+      </div>
+
+      <!-- Collapsible Deep Stockfish Analysis Card -->
+      <div id="stockfishDeepCard" class="stockfish-deep-card hidden">
+        <div class="deep-card-head">
+          <div class="deep-card-title">
+            <span class="deep-card-icon">🧠</span>
+            <strong>Stockfish 17 Engine Analysis</strong>
+            <span id="deepDepthBadge" class="deep-badge">Depth 16</span>
+          </div>
+          <button id="btnCloseDeepCard" class="ghost deep-close-btn" type="button">✕</button>
+        </div>
+        <div class="deep-metrics-row">
+          <span id="deepWinPct" class="deep-chip">Win: 50%</span>
+          <span id="deepEvalCp" class="deep-chip">Eval: +0.00</span>
+          <span id="deepBestMove" class="deep-chip highlight">Best: —</span>
+        </div>
+        <div id="deepPvLine" class="deep-pv-line muted">Principal line: —</div>
+      </div>
+
+      <div id="chessControls">
+        <select id="chessW" title="White model"></select>
+        <select id="chessB" title="Black model"></select>
+        <button id="btnChessNew" class="primary">New game</button>
+        <button id="btnChessStep" class="ghost">Step ▸</button>
+        <button id="btnChessAuto" class="ghost">Auto ▶</button>
+        <button id="btnChessHint" class="ghost hidden" title="Coach suggests a move">Hint 💡</button>
+        <button id="btnChessCoach" class="ghost" title="Stockfish vetoes blunders">Coach 🛡️</button>
+      </div>
+
+      <div id="chessFeed" class="chess-feed-card">
+        <div class="feed-header">
+          <div class="feed-tabs">
+            <button id="tabFeedBanter" class="feed-tab on" type="button">
+              <span>🔥 Ringside</span>
+              <span id="badgeBanter" class="tab-badge">0</span>
+            </button>
+            <button id="tabFeedMoves" class="feed-tab" type="button">
+              <span>♟️ Moves</span>
+              <span id="badgeMoves" class="tab-badge">0</span>
+            </button>
+          </div>
+          <div id="feedStatusSub" class="feed-sub">Live banter</div>
+        </div>
+        
+        <div id="feedBodyBanter" class="feed-pane">
+          <div id="ringside">
+            <div class="empty-state">
+              <span class="empty-icon">🥊</span>
+              <p>Quiet… too quiet. Start a game or make a move to unleash the banter.</p>
+            </div>
+          </div>
+          <div id="tauntRow" class="hidden">
+            <input id="taunt" placeholder="Talk trash with your move (optional)…" maxlength="140">
+          </div>
+        </div>
+
+        <div id="feedBodyMoves" class="feed-pane hidden">
+          <div id="chessMoves">
+            <div class="empty-state">
+              <span class="empty-icon">♟️</span>
+              <p>No moves yet. White moves first.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p id="chessStats" class="muted"></p>
+    </div>
+
+    <!-- Sub-Pane 2: AI Advisory Council -->
+    <div id="arenaPaneCouncil" class="arena-pane hidden">
+      <div class="arena-setup-card">
+        <div class="setup-header">
+          <div class="setup-title-wrap">
+            <h3>🏛️ AI Advisory Council</h3>
+            <p class="muted">Convene an independent jury of models to deliberate on a complex architectural or technical dilemma, synthesized by an executive Chief Judge.</p>
+          </div>
+        </div>
+
+        <div class="arena-presets-row">
+          <span class="preset-label">Preset Topics:</span>
+          <button class="arena-preset-pill council-preset-btn" type="button" data-topic="When should an engineering team migrate from a monolithic database to an event-driven architecture? Weigh data consistency, team velocity, and operational overhead.">Monolith vs Microservices</button>
+          <button class="arena-preset-pill council-preset-btn" type="button" data-topic="How should an autonomous code agent handle ambiguous instructions with potential side effects? Detail verification protocols and fallback policies.">AI Autonomy &amp; Safety</button>
+          <button class="arena-preset-pill council-preset-btn" type="button" data-topic="Provide a comprehensive trade-off analysis between Rust and Go for building high-concurrency network services. Consider developer velocity, latency predictability, and memory safety.">Rust vs Go Systems</button>
+          <button class="arena-preset-pill council-preset-btn" type="button" data-topic="What are the essential architectural principles for a privacy-first, local-only AI application running on consumer hardware?">Local-First AI</button>
+        </div>
+
+        <div class="arena-input-wrap">
+          <textarea id="councilTopic" rows="3" placeholder="Enter an engineering, architectural, or philosophical dilemma for the AI Council to deliberate…"></textarea>
+        </div>
+
+        <div class="council-selectors-grid">
+          <div class="council-col">
+            <label><strong>Council Jurors (2 to 4 models):</strong></label>
+            <div id="councilJurorsPickers" class="council-pickers-row"></div>
+          </div>
+          <div class="council-col">
+            <label><strong>Chief Synthesizer (Lead Judge):</strong></label>
+            <div class="council-select-wrap">
+              <select id="councilJudgeSelect"></select>
+            </div>
+          </div>
+        </div>
+
+        <div class="arena-actions-footer">
+          <div class="arena-exec-pills">
+            <button id="btnCouncilExecSeq" class="lab-pill-btn on" type="button">Sequential (VRAM-Safe)</button>
+            <button id="btnCouncilExecPar" class="lab-pill-btn" type="button">Parallel</button>
+          </div>
+          <button id="btnCouncilRun" class="primary arena-run-btn" type="button">
+            <span>🏛️ Convene Council</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="councilStatusNotice" class="lab-status-notice hidden">
+        <span class="lab-spinner">⏳</span>
+        <span id="councilStatusText">Jurors are deliberating…</span>
+      </div>
+
+      <div id="councilResultsArea" class="council-results-area hidden">
+        <div class="council-section-header">
+          <h4>Juror Perspectives</h4>
+        </div>
+        <div id="councilJurorsGrid" class="council-jurors-grid"></div>
+
+        <div class="council-section-header" style="margin-top:20px;">
+          <h4>Chief Synthesizer Report</h4>
+        </div>
+        <div id="councilSynthesizerCard" class="council-synthesizer-card"></div>
+      </div>
+    </div>
+
+    <!-- Sub-Pane 3: Adversarial AI Debate -->
+    <div id="arenaPaneDebate" class="arena-pane hidden">
+      <div class="arena-setup-card">
+        <div class="setup-header">
+          <div class="setup-title-wrap">
+            <h3>🥊 Adversarial AI Debate</h3>
+            <p class="muted">Two models duel head-to-head in turn-based adversarial debate with cross-examination, scored and judged by an impartial Arbiter.</p>
+          </div>
+        </div>
+
+        <div class="arena-presets-row">
+          <span class="preset-label">Debate Motions:</span>
+          <button class="debate-preset-pill" type="button" data-motion="Resolved: Local on-device AI will surpass centralized cloud API models in real-world user adoption and utility by 2030.">Local vs Cloud AI</button>
+          <button class="debate-preset-pill" type="button" data-motion="Resolved: Microservices architecture introduces more operational friction and failure modes than it solves for 90% of organizations.">Microservices Debate</button>
+          <button class="debate-preset-pill" type="button" data-motion="Resolved: Strongly-typed functional programming creates fundamentally more reliable and maintainable software than dynamically typed OOP.">Strong vs Dynamic Typing</button>
+          <button class="debate-preset-pill" type="button" data-motion="Resolved: Fully autonomous coding agents will render traditional junior engineering entry-level positions obsolete.">Autonomous Code Agents</button>
+        </div>
+
+        <div class="arena-input-wrap">
+          <textarea id="debateTopic" rows="2" placeholder="Enter debate proposition (e.g. Resolved: ...)">Resolved: Local on-device AI will surpass centralized cloud API models in utility by 2030.</textarea>
+        </div>
+
+        <div class="debate-selectors-grid">
+          <div class="debate-model-col pro-col">
+            <label><strong style="color:#10b981;">Affirmative (Pro):</strong></label>
+            <select id="debateModelASelect"></select>
+          </div>
+          <div class="debate-vs-badge">VS</div>
+          <div class="debate-model-col con-col">
+            <label><strong style="color:#f43f5e;">Negative (Con):</strong></label>
+            <select id="debateModelBSelect"></select>
+          </div>
+          <div class="debate-model-col judge-col">
+            <label><strong>Grand Arbiter (Judge):</strong></label>
+            <select id="debateJudgeSelect"></select>
+          </div>
+          <div class="debate-model-col small">
+            <label><strong>Rounds:</strong></label>
+            <select id="debateRoundsSelect">
+              <option value="1">1 Round (Opening)</option>
+              <option value="2" selected>2 Rounds (+ Rebuttals)</option>
+              <option value="3">3 Rounds (+ Closing)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="arena-actions-footer">
+          <div></div>
+          <button id="btnDebateRun" class="primary arena-run-btn" type="button">
+            <span>🥊 Start Adversarial Debate</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="debateStatusNotice" class="lab-status-notice hidden">
+        <span class="lab-spinner">⏳</span>
+        <span id="debateStatusText">Debate in session…</span>
+      </div>
+
+      <div id="debateResultsArea" class="debate-results-area hidden">
+        <div id="debateRoundsTimeline" class="debate-timeline"></div>
+        <div id="debateVerdictCard" class="debate-verdict-card"></div>
+      </div>
+    </div>
+
+    <!-- Arena History Drawer (Council & Debate Sessions) -->
+    <div id="arenaHistoryDrawer" class="lab-history-drawer hidden">
+      <div class="lab-drawer-header">
+        <h3>Arena Session History</h3>
+        <button id="btnCloseArenaHistory" class="ghost" type="button">✕</button>
+      </div>
+      <div class="arena-history-filter-row">
+        <button id="btnFilterArenaAll" class="lab-pill-btn on" type="button">All</button>
+        <button id="btnFilterArenaCouncil" class="lab-pill-btn" type="button">Council</button>
+        <button id="btnFilterArenaDebate" class="lab-pill-btn" type="button">Debate</button>
+      </div>
+      <div id="arenaHistoryList" class="lab-history-list"></div>
+    </div>
+  </section>
+</main>
+
+<div id="scrim" class="hidden"></div>
+<aside id="modelsPanel" class="drawer hidden">
+  <div class="drawer-head">
+    <div class="drawer-title-wrap">
+      <span class="models-title-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+          <rect x="9" y="9" width="6" height="6"></rect>
+          <line x1="9" y1="1" x2="9" y2="4"></line>
+          <line x1="15" y1="1" x2="15" y2="4"></line>
+          <line x1="9" y1="20" x2="9" y2="23"></line>
+          <line x1="15" y1="20" x2="15" y2="23"></line>
+          <line x1="20" y1="9" x2="23" y2="9"></line>
+          <line x1="20" y1="14" x2="23" y2="14"></line>
+          <line x1="1" y1="9" x2="4" y2="9"></line>
+          <line x1="1" y1="14" x2="4" y2="14"></line>
+        </svg>
+      </span>
+      <h3>Models & Engine</h3>
+      <span class="badge-engine">Ollama</span>
+    </div>
+    <button class="ghost closeBtn" data-close="modelsPanel">✕</button>
+  </div>
+
+  <div id="vramCard" class="vram-card">
+    <div class="vram-card-header">
+      <div class="vram-info">
+        <span class="vram-dot"></span>
+        <span id="vramStatusText" class="vram-status-text">Checking GPU…</span>
+      </div>
+      <button id="btnEjectVram" class="vram-eject-btn" title="Unload models from GPU VRAM">
+        <span>Free VRAM</span>
+        <span class="eject-icon">⏏</span>
+      </button>
+    </div>
+    <div class="vram-bar-track">
+      <div id="vramBarFill" class="vram-bar-fill" style="width: 0%"></div>
+    </div>
+    <div id="vramSubtext" class="vram-subtext">
+      <span>Hardware VRAM</span>
+      <span id="vramPctText">0%</span>
+    </div>
+  </div>
+
+  <h4>Model Providers &amp; Inference Engines</h4>
+  <p class="muted">Manage local Ollama and OpenAI-compatible inference backends (LM Studio, llama.cpp, vLLM).</p>
+  <div id="providersList" class="providers-list"></div>
+  <div class="row-btns" style="margin-bottom:14px;">
+    <button id="btnOpenAddProvider" class="ghost" type="button" style="font-size:0.8rem;padding:6px 12px;">+ Add Custom Provider</button>
+  </div>
+  <div id="addProviderForm" class="panel-card hidden" style="margin-bottom:16px;">
+    <div class="panel-card-head">
+      <span>Add Model Provider</span>
+      <button id="btnCancelAddProvider" class="ghost" type="button" style="padding:2px 8px;font-size:0.75rem;">✕</button>
+    </div>
+    <input id="provName" placeholder="Name (e.g. LM Studio, llama.cpp server)">
+    <select id="provType" style="margin:6px 0;width:100%;">
+      <option value="openai_compat">OpenAI Compatible (Local/Remote)</option>
+      <option value="ollama">Ollama Server</option>
+    </select>
+    <input id="provUrl" placeholder="Base URL (e.g. http://localhost:1234)">
+    <input id="provKey" type="password" placeholder="API Key (optional for local servers)">
+    <button id="btnSaveProvider" class="primary" type="button" style="margin-top:6px;">Save Provider</button>
+  </div>
+
+  <h4>Available Models</h4>
+  <p class="muted">Models detected across all active providers with zero cloud calls.</p>
+  <div id="modelList"></div>
+
+  <h4>Active Bot Assignment</h4>
+  <p class="muted">Select which local model powers each bot personality.</p>
+  <div id="perMode"></div>
+
+  <h4>Voice Synthesis (Kokoro-82M TTS)</h4>
+  <p class="muted">Natural on-device neural voice. Completely private & local.</p>
+  <div class="panel-card tts-card">
+    <div class="voice-picker-grid">
+      <div class="voice-col">
+        <label for="voiceFriendSelect"><strong>Friend Voice</strong></label>
+        <div class="voice-select-wrap">
+          <select id="voiceFriendSelect" class="voice-select"></select>
+          <button id="btnPreviewFriendVoice" class="voice-sample-btn" type="button" title="Sample Friend voice">▶ Test</button>
+        </div>
+      </div>
+      <div class="voice-col">
+        <label for="voiceNsfwSelect"><strong>After Dark Voice</strong></label>
+        <div class="voice-select-wrap">
+          <select id="voiceNsfwSelect" class="voice-select"></select>
+          <button id="btnPreviewNsfwVoice" class="voice-sample-btn" type="button" title="Sample After Dark voice">▶ Test</button>
+        </div>
+      </div>
+      <div class="voice-col">
+        <label for="voiceArchitectSelect"><strong>Architect Voice</strong></label>
+        <div class="voice-select-wrap">
+          <select id="voiceArchitectSelect" class="voice-select"></select>
+          <button id="btnPreviewArchitectVoice" class="voice-sample-btn" type="button" title="Sample Architect voice">▶ Test</button>
+        </div>
+      </div>
+      <div class="voice-col">
+        <label for="voiceMuseSelect"><strong>Muse Voice</strong></label>
+        <div class="voice-select-wrap">
+          <select id="voiceMuseSelect" class="voice-select"></select>
+          <button id="btnPreviewMuseVoice" class="voice-sample-btn" type="button" title="Sample Muse voice">▶ Test</button>
+        </div>
+      </div>
+    </div>
+    <div class="slider-row voice-speed-row" style="margin-top:12px;">
+      <span class="voice-speed-label"><strong>Speed</strong></span>
+      <input id="voiceSpeed" type="range" min="0.75" max="1.35" step="0.05" value="1.0">
+      <span id="voiceSpeedVal">1.0x</span>
+    </div>
+    <label class="check-row" style="margin-top:10px;">
+      <input id="autoSpeakCheck" type="checkbox">
+      <span>Automatically read aloud bot replies</span>
+    </label>
+  </div>
+
+  <h4>After Dark Personality</h4>
+  <p class="muted">Roleplay instructions & character definition for After Dark mode.</p>
+  <textarea id="nsfwPrompt" rows="4" placeholder="e.g. Slow-burn romantic tension, vivid senses, never breaks character…"></textarea>
+  <div class="row-btns">
+    <button id="btnSaveNsfwPrompt" class="primary">Save Personality</button>
+    <button id="btnResetNsfwPrompt" class="ghost">Reset</button>
+  </div>
+
+  <h4>Wildness (Creativity)</h4>
+  <p class="muted">Controls temperature: 0.0 is strict & deterministic, 2.0 is wild & chaotic.</p>
+  <div class="slider-row">
+    <input id="nsfwTemp" type="range" min="0" max="2" step="0.1" value="0.8">
+    <span id="nsfwTempVal">0.8</span>
+  </div>
+  <label class="check-row">
+    <input id="nsfwTools" type="checkbox">
+    <span>Enable Tools for After Dark (Clock, Wikipedia Search)</span>
+  </label>
+
+  <div class="panel-card">
+    <div class="panel-card-head">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="7 10 12 15 17 10"></polyline>
+        <line x1="12" y1="15" x2="12" y2="3"></line>
+      </svg>
+      <span>Import GGUF Model</span>
+    </div>
+    <p class="muted">Import a downloaded .gguf file into Ollama directly from your local disk.</p>
+    <input id="ggufName" placeholder="Model name (e.g. dolphin3-8b)">
+    <input id="ggufPath" placeholder="Local path (e.g. /home/sumeet/models/model.gguf)">
+    <button id="btnImport" class="primary">Import into Ollama</button>
+    <p id="importMsg" class="muted"></p>
+  </div>
+
+  <div class="panel-card">
+    <div class="panel-card-head">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+      </svg>
+      <span>Security Passcode</span>
+    </div>
+    <p class="muted">Protect your local chats with a 4-digit PIN or password.</p>
+    <input id="newCode" type="password" placeholder="New passcode (4+ chars)">
+    <button id="btnSetCode" class="ghost">Update Passcode</button>
+  </div>
+
+  <div class="panel-card">
+    <div class="panel-card-head">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+        <polyline points="17 21 17 13 7 13 7 21"></polyline>
+        <polyline points="7 3 7 8 15 8"></polyline>
+      </svg>
+      <span>Backup & Export</span>
+    </div>
+    <p class="muted">Export chat logs or backup your complete SQLite database file.</p>
+    <div class="row-btns">
+      <button id="btnBackup" class="ghost">Download SQLite Backup</button>
+    </div>
+    <div class="row-btns">
+      <button id="btnExportNsfw" class="ghost">Export After Dark Chat</button>
+      <button id="btnExportFriend" class="ghost">Export Friend Chat</button>
+    </div>
+  </div>
+</aside>
+
+<aside id="friendPanel" class="drawer hidden">
+  <div class="drawer-head"><h3>Friend remembers</h3><button class="ghost closeBtn" data-close="friendPanel">✕</button></div>
+  <p class="muted">Erasable. Lives in your local database only.</p>
+  <input id="friendName" placeholder="Your name">
+  <textarea id="friendAbout" rows="3" placeholder="About you: likes, timezone, goals…"></textarea>
+  <button id="btnSaveProfile" class="primary">Save</button>
+  <h4>Personality</h4>
+  <p class="muted">How Friend talks. Blank = default. Applies to new replies.</p>
+  <textarea id="friendPrompt" rows="4" placeholder="e.g. Talks like an old hostel roommate. Calls me bhai. Roasts me when I'm lazy."></textarea>
+  <div class="row-btns"><button id="btnSaveFriendPrompt" class="primary">Save personality</button><button id="btnResetFriendPrompt" class="ghost">Reset</button></div>
+  <h4>Wildness</h4>
+  <p class="muted">How predictable vs surprising Friend is. 0 = steady, 2 = chaotic.</p>
+  <div class="slider-row"><input id="friendTemp" type="range" min="0" max="2" step="0.1" value="0.8"><span id="friendTempVal">0.8</span></div>
+  <label class="check-row"><input id="friendTools" type="checkbox" checked><span>Tools for Friend (time, Wikipedia, memory)</span></label>
+  <h4>Learned from chat</h4>
+  <div id="factList"></div>
+  <input id="newFact" placeholder="Add a memory manually…">
+  <button id="btnAddFact" class="ghost">Remember this</button>
+  <button id="btnForget" class="ghost danger">Forget everything</button>
+</aside>
+
+<aside id="architectPanel" class="drawer cyber-drawer hidden">
+  <div class="drawer-head cyber-drawer-head">
+    <div class="drawer-title-wrap">
+      <div class="cyber-glyph-icon violet-halo">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="4" y="4" width="16" height="16" rx="2"/>
+          <rect x="9" y="9" width="6" height="6"/>
+          <path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/>
+        </svg>
+      </div>
+      <div>
+        <div class="cyber-title-row">
+          <h3>Architect Stack &amp; Rules</h3>
+          <span class="cyber-tag violet-tag">SYS::ARCHITECT // V2.5</span>
+        </div>
+        <span class="muted" style="font-size:0.75rem;">Persistent engineering stack, architecture standards &amp; lint directives</span>
+      </div>
+    </div>
+    <button class="ghost closeBtn" data-close="architectPanel" title="Close drawer">✕</button>
+  </div>
+
+  <div class="cyber-drawer-body">
+    <!-- Section 1: System Persona & Directive -->
+    <div class="cyber-card">
+      <div class="cyber-card-head">
+        <span class="cyber-sec-badge">SEC // 01</span>
+        <h4>Core Architecture &amp; System Directive</h4>
+      </div>
+      <p class="muted card-desc">Approach to code generation. Blank = default Principal Staff Engineer.</p>
+      <div class="cyber-input-wrapper">
+        <span class="cyber-input-tag">DIRECTIVE.TXT</span>
+        <textarea id="architectPrompt" class="cyber-textarea" rows="3" placeholder="e.g. Always write production TypeScript with Zod validation. Favor modular domain logic. Explain Big-O complexity for algorithms."></textarea>
+      </div>
+      <div class="row-btns">
+        <button id="btnSaveArchitectPrompt" class="cyber-btn primary-violet">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+          Save Directive
+        </button>
+        <button id="btnResetArchitectPrompt" class="cyber-btn ghost">Reset Default</button>
+      </div>
+    </div>
+
+    <!-- Section 2: Determinism & Engine -->
+    <div class="cyber-card">
+      <div class="cyber-card-head">
+        <span class="cyber-sec-badge">SEC // 02</span>
+        <h4>Determinism &amp; Temperature Control</h4>
+      </div>
+      <p class="muted card-desc">0.05 = rigorous &amp; deterministic, 0.7 = exploratory architecture.</p>
+      <div class="slider-cyber-row">
+        <input id="architectTemp" class="cyber-slider" type="range" min="0" max="2" step="0.05" value="0.2">
+        <span id="architectTempVal" class="cyber-slider-val">0.20</span>
+      </div>
+      <div class="cyber-quick-pills">
+        <button type="button" class="cyber-pill" onclick="$('architectTemp').value=0.1; $('architectTempVal').textContent='0.10'; $('architectTemp').dispatchEvent(new Event('input'));">0.1 Strict</button>
+        <button type="button" class="cyber-pill active" onclick="$('architectTemp').value=0.2; $('architectTempVal').textContent='0.20'; $('architectTemp').dispatchEvent(new Event('input'));">0.2 Code</button>
+        <button type="button" class="cyber-pill" onclick="$('architectTemp').value=0.7; $('architectTempVal').textContent='0.70'; $('architectTemp').dispatchEvent(new Event('input'));">0.7 Design</button>
+      </div>
+      <label class="cyber-check-row">
+        <input id="architectTools" type="checkbox" checked>
+        <span class="cyber-check-label">Enable Architect Workbench Tools (Python Sandbox, Web Docs, Stack Memory)</span>
+      </label>
+    </div>
+
+    <!-- Section 3: Project Tech Stack & Libraries -->
+    <div class="cyber-card">
+      <div class="cyber-card-head">
+        <span class="cyber-sec-badge">SEC // 03</span>
+        <h4>Project Tech Stack &amp; Libraries</h4>
+      </div>
+      <p class="muted card-desc">Active frameworks, databases, and dependencies injected into prompt context.</p>
+      <div class="preset-label-row">
+        <span class="muted" style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.05em;">1-Click Stack Presets:</span>
+      </div>
+      <div class="cyber-quick-pills stack-presets">
+        <button type="button" class="cyber-pill" data-stack="TypeScript 5.x, React 19, Next.js 15 (App Router), Tailwind CSS v4, FastAPI, PostgreSQL, Prisma ORM, Vitest">Next.js + FastAPI</button>
+        <button type="button" class="cyber-pill" data-stack="TypeScript, Node.js, Express, PostgreSQL, Prisma, Docker, Redis, Vitest">Node + Express + PG</button>
+        <button type="button" class="cyber-pill" data-stack="Python 3.12, PyTorch 2.x, HuggingFace Transformers, FastAPI, Docker, Ruff, Pytest">Python AI + PyTorch</button>
+        <button type="button" class="cyber-pill" data-stack="Flutter 3.x, Dart 3.x, Riverpod 2.x, Clean Architecture (Data/Domain/Presentation), Dio, Freezed">Flutter + Riverpod</button>
+        <button type="button" class="cyber-pill" data-stack="Rust 2024 edition, Tokio async runtime, Axum web framework, SQLx, PostgreSQL, Tracing">Rust Systems + Axum</button>
+      </div>
+      <div class="cyber-input-wrapper">
+        <span class="cyber-input-tag">STACK.CONFIG</span>
+        <textarea id="architectStack" class="cyber-textarea" rows="3" placeholder="e.g. TypeScript, React 19, Tailwind CSS v4, FastAPI, PostgreSQL, Prisma, Vitest"></textarea>
+      </div>
+    </div>
+
+    <!-- Section 4: Engineering & Linting Rules -->
+    <div class="cyber-card">
+      <div class="cyber-card-head">
+        <span class="cyber-sec-badge">SEC // 04</span>
+        <h4>Engineering &amp; Linting Rules</h4>
+      </div>
+      <p class="muted card-desc">Non-negotiable coding conventions, safety constraints, and code standards.</p>
+      <div class="preset-label-row">
+        <span class="muted" style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.05em;">1-Click Rule Directives:</span>
+      </div>
+      <div class="cyber-quick-pills rule-presets">
+        <button type="button" class="cyber-pill" data-rule="Strict typing: zero 'any' types. Modular domain logic. Explicit error handling via Result types. Include unit tests for edge cases.">Strict Types &amp; Tests</button>
+        <button type="button" class="cyber-pill" data-rule="Production complete: zero TODO placeholders or omitted helpers. Provide compilable full code files. Document Big-O time and space complexity.">Zero Placeholders</button>
+        <button type="button" class="cyber-pill" data-rule="Idempotent microservice design. Schema validation on all inbound/outbound boundaries. Structured JSON logging with trace context.">Resilient Services</button>
+      </div>
+      <div class="cyber-input-wrapper">
+        <span class="cyber-input-tag">RULES.LINT</span>
+        <textarea id="architectRules" class="cyber-textarea" rows="3" placeholder="e.g. Strict immutable state, zero any types, handle all error branches explicitly, include unit test cases for edge cases"></textarea>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="cyber-action-bar">
+      <button id="btnSaveArchitectStack" class="cyber-btn primary-emerald">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+        Save Project Stack &amp; Rules
+      </button>
+      <button id="btnClearArchitectStack" class="cyber-btn ghost danger">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+        Clear All Rules
+      </button>
+    </div>
+  </div>
+</aside>
+
+<aside id="musePanel" class="drawer cyber-drawer hidden">
+  <div class="drawer-head cyber-drawer-head">
+    <div class="drawer-title-wrap">
+      <div class="cyber-glyph-icon rose-halo">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m18 2 4 4-14 14H4v-4L18 2z"/>
+          <path d="m14.5 5.5 4 4"/>
+          <path d="M4 20h16"/>
+        </svg>
+      </div>
+      <div>
+        <div class="cyber-title-row">
+          <h3>Story &amp; World Bible</h3>
+          <span class="cyber-tag rose-tag">SYS::MUSE // NARRATIVE ENGINE</span>
+        </div>
+        <span class="muted" style="font-size:0.75rem;">Persistent worldbuilding, character dossiers &amp; narrative constraints</span>
+      </div>
+    </div>
+    <button class="ghost closeBtn" data-close="musePanel" title="Close drawer">✕</button>
+  </div>
+
+  <div class="cyber-drawer-body">
+    <!-- Section 1: Narrative Voice & Directive -->
+    <div class="cyber-card">
+      <div class="cyber-card-head">
+        <span class="cyber-sec-badge rose-badge">LORE // 01</span>
+        <h4>Author Directive &amp; Narrative Voice</h4>
+      </div>
+      <p class="muted card-desc">Guiding tone, point of view, or role. Blank = default developmental editor persona.</p>
+      <div class="cyber-input-wrapper">
+        <span class="cyber-input-tag">VOICE.TXT</span>
+        <textarea id="musePrompt" class="cyber-textarea rose-focus" rows="3" placeholder="e.g. Socratic developmental editor. Third person limited POV, dark gothic fantasy, emphasis on sensory dread and psychological subtext."></textarea>
+      </div>
+      <div class="row-btns">
+        <button id="btnSaveMusePrompt" class="cyber-btn primary-rose">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+          Save Directive
+        </button>
+        <button id="btnResetMusePrompt" class="cyber-btn ghost">Reset Default</button>
+      </div>
+    </div>
+
+    <!-- Section 2: Fluency & Imagination -->
+    <div class="cyber-card">
+      <div class="cyber-card-head">
+        <span class="cyber-sec-badge rose-badge">LORE // 02</span>
+        <h4>Creative Fluency &amp; Imagination</h4>
+      </div>
+      <p class="muted card-desc">0.2 is structured &amp; deterministic, 0.85 is imaginative &amp; fluent, 1.2+ is surreal.</p>
+      <div class="slider-cyber-row">
+        <input id="museTemp" class="cyber-slider rose-slider" type="range" min="0" max="2" step="0.05" value="0.85">
+        <span id="museTempVal" class="cyber-slider-val rose-val">0.85</span>
+      </div>
+      <div class="cyber-quick-pills">
+        <button type="button" class="cyber-pill" onclick="$('museTemp').value=0.3; $('museTempVal').textContent='0.30'; $('museTemp').dispatchEvent(new Event('input'));">0.3 Grounded</button>
+        <button type="button" class="cyber-pill active" onclick="$('museTemp').value=0.85; $('museTempVal').textContent='0.85'; $('museTemp').dispatchEvent(new Event('input'));">0.85 Fluent</button>
+        <button type="button" class="cyber-pill" onclick="$('museTemp').value=1.2; $('museTempVal').textContent='1.20'; $('museTemp').dispatchEvent(new Event('input'));">1.2 Surreal</button>
+      </div>
+      <label class="cyber-check-row">
+        <input id="museTools" type="checkbox" checked>
+        <span class="cyber-check-label">Enable Storycraft Tools (Auto Lore Memory, Wikipedia Lore Search)</span>
+      </label>
+    </div>
+
+    <!-- Section 3: World Bible & Setting Lore -->
+    <div class="cyber-card">
+      <div class="cyber-card-head">
+        <span class="cyber-sec-badge rose-badge">LORE // 03</span>
+        <h4>World Bible &amp; Setting Lore</h4>
+      </div>
+      <p class="muted card-desc">Geography, factions, magic/technology mechanics, timelines, and canon history.</p>
+      <div class="preset-label-row">
+        <span class="muted" style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.05em;">1-Click Genre Presets:</span>
+      </div>
+      <div class="cyber-quick-pills muse-presets">
+        <button type="button" class="cyber-pill" data-muse-bible="A towering neo-Tokyo megastructure where neon cuts through perpetual acidic rain. Neural implants are taxed by corporate conglomerates, while subterranean data-couriers traffic illicit memories across the forgotten sub-levels.">Cyberpunk Megacity</button>
+        <button type="button" class="cyber-pill" data-muse-bible="A generation vessel stranded in the Kuiper belt after quantum drive collapse. Atmosphere is strictly rationed; hull shielding is bolstered with harvested comet ice. Society is partitioned between the Navigators Council and the Engine Guild.">Hard Sci-Fi</button>
+        <button type="button" class="cyber-pill" data-muse-bible="An ancient gothic empire trapped in a perpetual solar eclipse. Magic requires living bone and memory sacrifice. The Cathedral of Obsidian guards the sealed subterranean abyss where the sleeping gods murmur.">Dark Gothic Fantasy</button>
+        <button type="button" class="cyber-pill" data-muse-bible="1952 rain-slicked metropolis. Corrupt precinct captains, cigarette smoke curling under flickering streetlamps, and jazz clubs concealing syndicate ledgers. Everyone has a debt they cannot pay.">Neo-Noir Detective</button>
+      </div>
+      <div class="cyber-input-wrapper">
+        <span class="cyber-input-tag">WORLD_BIBLE.MD</span>
+        <textarea id="museBible" class="cyber-textarea rose-focus" rows="4" placeholder="e.g. The sunken city of Ys, magic fueled by memory loss, the three merchant guilds, taboo on daylight travel..."></textarea>
+      </div>
+    </div>
+
+    <!-- Section 4: Character Dossiers -->
+    <div class="cyber-card">
+      <div class="cyber-card-head">
+        <span class="cyber-sec-badge rose-badge">LORE // 04</span>
+        <h4>Character Dossiers</h4>
+      </div>
+      <p class="muted card-desc">Protagonists, antagonists, internal flaws, secret motivations, and relationship dynamics.</p>
+      <div class="cyber-input-wrapper">
+        <span class="cyber-input-tag">DOSSIERS.MD</span>
+        <textarea id="museCharacters" class="cyber-textarea rose-focus" rows="4" placeholder="e.g. Roland: Cynical cartographer searching for his sister. Fear of open water. Secretly holds the last ember stone. Doesn't trust Anya."></textarea>
+      </div>
+    </div>
+
+    <!-- Section 5: Style Constraints -->
+    <div class="cyber-card">
+      <div class="cyber-card-head">
+        <span class="cyber-sec-badge rose-badge">LORE // 05</span>
+        <h4>Style Constraints &amp; Author Directives</h4>
+      </div>
+      <p class="muted card-desc">Prose guidelines, forbidden clichés, pacing notes, and vocabulary rules.</p>
+      <div class="preset-label-row">
+        <span class="muted" style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.05em;">1-Click Prose Directives:</span>
+      </div>
+      <div class="cyber-quick-pills muse-rule-presets">
+        <button type="button" class="cyber-pill" data-muse-rule="Visceral sensory grounding. Third person limited POV with tight psychological subtext. Ban modern colloquialisms and generic filler phrases. Conclude with Socratic plot interrogation choices.">Sensory Depth &amp; Subtext</button>
+        <button type="button" class="cyber-pill" data-muse-rule="Fast cinematic pacing. Punchy staccato action beats alternating with lingering atmospheric dread. Sharp, clipped dialogue with unsaid conflict.">Cinematic &amp; Atmospheric</button>
+      </div>
+      <div class="cyber-input-wrapper">
+        <span class="cyber-input-tag">CONSTRAINTS.TXT</span>
+        <textarea id="museRules" class="cyber-textarea rose-focus" rows="3" placeholder="e.g. Show don't tell. Visceral sensory details. Avoid modern colloquialisms. No melodrama without earned setup."></textarea>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="cyber-action-bar">
+      <button id="btnSaveMuseBible" class="cyber-btn primary-rose">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+        Save Story Bible
+      </button>
+      <button id="btnClearMuseBible" class="cyber-btn ghost danger">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+        Clear Story Bible
+      </button>
+    </div>
+  </div>
+</aside>
+
+<aside id="themesPanel" class="drawer hidden">
+  <div class="drawer-head">
+    <div class="drawer-title-wrap">
+      <span class="theme-title-icon">🎨</span>
+      <h3>Themes</h3>
+    </div>
+    <button class="ghost closeBtn" data-close="themesPanel">✕</button>
+  </div>
+  <p class="muted">25 curated color atmospheres. Changes apply instantly and save to this browser.</p>
+  <div class="theme-filters">
+    <button class="theme-filter-btn on" data-filter="all">All (25)</button>
+    <button class="theme-filter-btn" data-filter="neon">Cyber & Neon</button>
+    <button class="theme-filter-btn" data-filter="classic">Classic Dark</button>
+    <button class="theme-filter-btn" data-filter="nature">Warm & Earth</button>
+    <button class="theme-filter-btn" data-filter="minimal">OLED & Minimal</button>
+  </div>
+  <div id="themeGrid" class="theme-grid"></div>
+</aside>
+
+<aside id="skillsPanel" class="drawer hidden">
+  <div class="drawer-head">
+    <div class="drawer-title-wrap">
+      <span class="skills-title-icon">⚡</span>
+      <h3>Skills &amp; Commands</h3>
+    </div>
+    <button class="ghost closeBtn" data-close="skillsPanel">✕</button>
+  </div>
+  <p class="muted">Add specialized prompt skills and invoke them anytime using <code>/</code> in chat.</p>
+
+  <div class="skills-action-bar">
+    <button id="btnToggleNewSkill" class="primary w-full" type="button">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      <span>Create Custom Skill</span>
+    </button>
+  </div>
+
+  <!-- Create / Edit Skill Form (collapsible) -->
+  <div id="skillFormCard" class="panel-card skill-form-card hidden">
+    <div class="card-head">
+      <h4 id="skillFormTitle">New Custom Skill</h4>
+      <button id="btnCancelSkillForm" class="ghost-xs" type="button">✕</button>
+    </div>
+    <input type="hidden" id="editSkillId" value="">
+    <div class="form-row">
+      <div class="form-col">
+        <label for="skillCmd">Command trigger</label>
+        <div class="input-with-addon">
+          <span class="input-addon">/</span>
+          <input id="skillCmd" placeholder="e.g. eli5, roast, code" maxlength="32">
+        </div>
+      </div>
+      <div class="form-col form-col-icon">
+        <label for="skillIcon">Emoji / Icon</label>
+        <input id="skillIcon" placeholder="⚡" maxlength="8" value="⚡">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-col">
+        <label for="skillName">Display Title</label>
+        <input id="skillName" placeholder="e.g. Explain Like I'm 5" maxlength="64">
+      </div>
+      <div class="form-col">
+        <label for="skillMode">Bot availability</label>
+        <select id="skillMode">
+          <option value="all">All Bots (Global)</option>
+          <option value="friend">Friend Mode Only</option>
+          <option value="nsfw">After Dark Only</option>
+          <option value="architect">Architect Only</option>
+          <option value="muse">Muse Only</option>
+        </select>
+      </div>
+    </div>
+    <label for="skillDesc">Description</label>
+    <input id="skillDesc" placeholder="Brief summary of what this skill does" maxlength="200">
+    <label for="skillPrompt">System Directive / Prompt Template</label>
+    <textarea id="skillPrompt" rows="4" placeholder="Instructions, persona, constraints, or format rules the model must follow when this skill is invoked…"></textarea>
+    <div class="form-actions">
+      <button id="btnSaveSkill" class="primary" type="button">Save Skill</button>
+      <button id="btnCancelSkillEdit" class="ghost" type="button">Cancel</button>
+    </div>
+  </div>
+
+  <div class="skills-filter-tabs">
+    <button class="skill-tab-btn on" data-filter="all">All</button>
+    <button class="skill-tab-btn" data-filter="builtin">Built-in</button>
+    <button class="skill-tab-btn" data-filter="custom">Custom</button>
+  </div>
+
+  <div id="skillsList" class="skills-list"></div>
+</aside>
+
+<aside id="docHubPanel" class="drawer hidden" aria-label="Document Knowledge Hub">
+  <div class="drawer-head">
+    <div class="drawer-title-wrap">
+      <span class="skills-title-icon">📚</span>
+      <div>
+        <h3>Document Knowledge Hub</h3>
+        <span class="muted" style="font-size:0.75rem;">Persistent PDFs &amp; Documents · Study Material · Interactive Quizzes</span>
+      </div>
+    </div>
+    <button class="ghost closeBtn" data-close="docHubPanel">✕</button>
+  </div>
+
+  <!-- Document Upload Dropzone & Trigger -->
+  <div class="doc-upload-box" id="docDropZone">
+    <input type="file" id="docHubFileInput" class="hidden" multiple accept=".pdf,.docx,.doc,.txt,.md,.py,.js,.json,.csv,.xml,.sql">
+    <div class="doc-upload-icon">📄</div>
+    <div class="doc-upload-text">
+      <strong>Drop PDFs or documents here</strong>
+      <span>or click to browse from device</span>
+    </div>
+    <button id="btnDocHubUploadTrigger" class="primary doc-upload-btn" type="button">Upload Document</button>
+  </div>
+
+  <!-- Document Comparison Section (Collapsible) -->
+  <div class="doc-compare-card">
+    <div class="doc-compare-head">
+      <span class="doc-compare-title">⚖️ Compare Two Documents</span>
+      <button id="btnToggleCompareForm" class="ghost-xs" type="button">Compare</button>
+    </div>
+    <div id="docCompareForm" class="doc-compare-body hidden">
+      <div class="compare-select-row">
+        <div class="compare-col">
+          <label>Document A:</label>
+          <select id="docCompareSelectA"></select>
+        </div>
+        <div class="compare-vs">vs</div>
+        <div class="compare-col">
+          <label>Document B:</label>
+          <select id="docCompareSelectB"></select>
+        </div>
+      </div>
+      <button id="btnRunDocCompare" class="primary w-full" type="button">Run Comparative Analysis</button>
+    </div>
+  </div>
+
+  <!-- Documents Search & List Header -->
+  <div class="doc-list-header">
+    <div class="doc-search-wrap">
+      <input id="docHubSearch" placeholder="Search saved documents…" />
+    </div>
+    <span id="docHubCountBadge" class="doc-count-badge">0 documents</span>
+  </div>
+
+  <!-- Document Items List -->
+  <div id="docHubList" class="doc-hub-list">
+    <div class="muted" style="padding:24px;text-align:center;">No documents uploaded yet. Upload a PDF or notes file to get started.</div>
+  </div>
+</aside>
+
+<!-- Model Observatory & Diagnostics Drawer -->
+<aside id="observatoryPanel" class="drawer hidden" aria-label="Model Observatory & Diagnostics">
+  <div class="drawer-head">
+    <div class="drawer-title-wrap">
+      <span class="skills-title-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="obs-header-icon">
+          <circle cx="12" cy="12" r="9"></circle>
+          <path d="M12 3a9 9 0 0 1 9 9"></path>
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M12 12l5 -5"></path>
+        </svg>
+      </span>
+      <div>
+        <h3>Model Observatory</h3>
+        <span class="muted" style="font-size:0.75rem;">Live VRAM/GPU Telemetry · Loaded Models · Diagnostics</span>
+      </div>
+    </div>
+    <button class="ghost closeBtn" data-close="observatoryPanel">✕</button>
+  </div>
+
+  <div class="observatory-actions-bar">
+    <div class="obs-refresh-status">
+      <span class="live-pulse"></span>
+      <span id="obsTelemetryStatus">Live Polling (3s)</span>
+    </div>
+    <div class="obs-actions-group">
+      <button id="btnObservatoryRefresh" class="ghost-xs" type="button" title="Refresh now">Refresh ↺</button>
+      <button id="btnObservatoryEjectAll" class="ghost-xs danger" type="button" title="Evict all loaded models from VRAM">Eject All ⚡</button>
+      <button id="btnObservatoryClearLogs" class="ghost-xs" type="button" title="Clear telemetry inference logs">Clear Logs</button>
+    </div>
+  </div>
+
+  <!-- Hardware Telemetry Cards Grid -->
+  <div class="observatory-telemetry-grid">
+    <!-- GPU Card -->
+    <div class="obs-card" id="obsGpuCard">
+      <div class="obs-card-head">
+        <div class="obs-card-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="obs-head-icon gpu-icon">
+            <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+            <rect x="9" y="9" width="6" height="6"></rect>
+            <line x1="9" y1="1" x2="9" y2="4"></line>
+            <line x1="15" y1="1" x2="15" y2="4"></line>
+            <line x1="9" y1="20" x2="9" y2="23"></line>
+            <line x1="15" y1="20" x2="15" y2="23"></line>
+            <line x1="20" y1="9" x2="23" y2="9"></line>
+            <line x1="20" y1="14" x2="23" y2="14"></line>
+            <line x1="1" y1="9" x2="4" y2="9"></line>
+            <line x1="1" y1="14" x2="4" y2="14"></line>
+          </svg>
+          <strong id="obsGpuName">NVIDIA GPU</strong>
+        </div>
+        <span id="obsGpuTemp" class="obs-badge">52°C</span>
+      </div>
+      <div class="obs-metric-row">
+        <span class="obs-metric-label">VRAM Usage</span>
+        <span id="obsVramText" class="obs-metric-val">0 / 0 MB (0%)</span>
+      </div>
+      <div class="obs-progress-bar">
+        <div id="obsVramBar" class="obs-progress-fill" style="width: 0%;"></div>
+      </div>
+      <div class="obs-sub-metrics">
+        <span>GPU Load: <strong id="obsGpuLoad">0%</strong></span>
+        <span>Free: <strong id="obsVramFree">0 MB</strong></span>
+      </div>
+    </div>
+
+    <!-- System Memory Card -->
+    <div class="obs-card">
+      <div class="obs-card-head">
+        <div class="obs-card-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="obs-head-icon ram-icon">
+            <path d="M2 7h20v10H2z"></path>
+            <path d="M6 11v2"></path>
+            <path d="M10 11v2"></path>
+            <path d="M14 11v2"></path>
+            <path d="M18 11v2"></path>
+          </svg>
+          <strong>System Memory</strong>
+        </div>
+        <span id="obsCpuBadge" class="obs-badge">CPU: 0%</span>
+      </div>
+      <div class="obs-metric-row">
+        <span class="obs-metric-label">RAM Usage</span>
+        <span id="obsRamText" class="obs-metric-val">0 / 0 GB (0%)</span>
+      </div>
+      <div class="obs-progress-bar">
+        <div id="obsRamBar" class="obs-progress-fill ram-fill" style="width: 0%;"></div>
+      </div>
+      <div class="obs-sub-metrics">
+        <span>Available: <strong id="obsRamFree">0 GB</strong></span>
+        <span>Total: <strong id="obsRamTotal">0 GB</strong></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Global Inference Performance KPIs -->
+  <div class="obs-kpi-row">
+    <div class="obs-kpi-cell">
+      <span class="obs-kpi-val" id="obsKpiTotal">0</span>
+      <span class="obs-kpi-lbl">Total Queries</span>
+    </div>
+    <div class="obs-kpi-cell">
+      <span class="obs-kpi-val" id="obsKpiSpeed">0.0</span>
+      <span class="obs-kpi-lbl">Avg Tokens/s</span>
+    </div>
+    <div class="obs-kpi-cell">
+      <span class="obs-kpi-val" id="obsKpiLatency">0 ms</span>
+      <span class="obs-kpi-lbl">Avg Latency</span>
+    </div>
+    <div class="obs-kpi-cell">
+      <span class="obs-kpi-val" id="obsKpiSuccess">100%</span>
+      <span class="obs-kpi-lbl">Reliability</span>
+    </div>
+  </div>
+
+  <!-- Loaded Models in VRAM Section -->
+  <div class="obs-section-header">
+    <strong>Loaded Models in VRAM</strong>
+    <span id="obsLoadedCountBadge" class="doc-count-badge">0 active</span>
+  </div>
+  <div id="obsLoadedList" class="obs-loaded-list">
+    <div class="muted" style="padding:16px;text-align:center;">No models currently resident in VRAM.</div>
+  </div>
+
+  <!-- Recent Inferences Log Section -->
+  <div class="obs-section-header">
+    <strong>Recent Inference Diagnostics</strong>
+    <span class="muted" style="font-size:0.75rem;">Last 50 requests</span>
+  </div>
+  <div id="obsLogsList" class="obs-logs-list">
+    <div class="muted" style="padding:16px;text-align:center;">No inference requests recorded yet.</div>
+  </div>
+</aside>
+
+<!-- Prompt Library & Versioned Presets Drawer -->
+<aside id="promptsPanel" class="drawer hidden" aria-label="Prompt Library & Versioned Presets">
+  <div class="drawer-head">
+    <div class="drawer-title-wrap">
+      <span class="skills-title-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="obs-header-icon" style="color:var(--amber,#f59e0b);">
+          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
+          <path d="M9 16a5 5 0 1 1 6 0c0 1-1 2-1 3H10c0-1-1-2-1-3z"></path>
+        </svg>
+      </span>
+      <div>
+        <h3>Prompt Library</h3>
+        <span class="muted" style="font-size:0.75rem;">Curated Presets · Reusable Templates · Dynamic Variables</span>
+      </div>
+    </div>
+    <button class="ghost closeBtn" data-close="promptsPanel">✕</button>
+  </div>
+
+  <!-- Prompt Creator / Editor Form (Collapsible) -->
+  <div class="prompt-builder-card">
+    <div class="prompt-builder-head">
+      <span class="prompt-builder-title">✨ Create / Edit Template</span>
+      <button id="btnTogglePromptForm" class="ghost-xs" type="button">+ New Template</button>
+    </div>
+    <div id="promptEditorForm" class="prompt-builder-body hidden">
+      <input type="hidden" id="promptEditId" value="">
+      <div class="form-row">
+        <div class="form-col" style="flex:2;">
+          <label for="promptTmplTitle">Template Title</label>
+          <input id="promptTmplTitle" placeholder="e.g. Code Refactor & Clean Architecture" maxlength="80">
+        </div>
+        <div class="form-col">
+          <label for="promptTmplCategory">Category</label>
+          <select id="promptTmplCategory">
+            <option value="Coding">Coding</option>
+            <option value="Writing">Writing</option>
+            <option value="Analysis">Analysis</option>
+            <option value="Productivity">Productivity</option>
+            <option value="Education">Education</option>
+            <option value="General">General</option>
+          </select>
+        </div>
+      </div>
+      <label for="promptTmplDesc">Description</label>
+      <input id="promptTmplDesc" placeholder="Short description of what this prompt template accomplishes…" maxlength="200">
+      <label for="promptTmplSystem">System Directive (Optional)</label>
+      <textarea id="promptTmplSystem" rows="2" placeholder="Persona, instructions, or behavioral constraints for the model…"></textarea>
+      <label for="promptTmplUser">User Prompt Template (Supports <code>{{variable}}</code> placeholders)</label>
+      <textarea id="promptTmplUser" rows="4" placeholder="Enter prompt template. Use {{variable_name}} for dynamic inputs like {{code}}, {{topic}}, or {{text}}…"></textarea>
+      <div class="form-actions">
+        <button id="btnSavePromptTemplate" class="primary" type="button">Save Template</button>
+        <button id="btnCancelPromptEdit" class="ghost" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search & Category Filter Pills -->
+  <div class="prompt-filter-bar">
+    <div class="prompt-category-tabs">
+      <button class="prompt-tab-btn on" data-cat="all">All</button>
+      <button class="prompt-tab-btn" data-cat="favorites"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none" style="display:inline-block;vertical-align:-1px;margin-right:4px;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>Favorites</button>
+      <button class="prompt-tab-btn" data-cat="Coding">Coding</button>
+      <button class="prompt-tab-btn" data-cat="Writing">Writing</button>
+      <button class="prompt-tab-btn" data-cat="Analysis">Analysis</button>
+      <button class="prompt-tab-btn" data-cat="Productivity">Productivity</button>
+      <button class="prompt-tab-btn" data-cat="Education">Education</button>
+    </div>
+    <div class="doc-search-wrap" style="margin-top:10px;">
+      <input id="promptSearchInput" placeholder="Search templates by title or content…" />
+    </div>
+  </div>
+
+  <!-- Templates List -->
+  <div id="promptsList" class="prompts-list"></div>
+</aside>
+
+<!-- Variable Prompt Filler Modal -->
+<div id="promptVarModal" class="veil hidden">
+  <div class="veil-card prompt-modal-card">
+    <div class="prompt-modal-head">
+      <div>
+        <h3 id="promptModalTitle">Fill Template Variables</h3>
+        <span class="muted" style="font-size:0.75rem;">Enter dynamic values for this prompt template</span>
+      </div>
+      <button id="btnClosePromptModal" class="ghost-xs" type="button">✕</button>
+    </div>
+    <div id="promptModalFields" class="prompt-modal-fields"></div>
+    <div class="prompt-modal-footer">
+      <button id="btnCancelPromptModal" class="ghost" type="button">Cancel</button>
+      <button id="btnSubmitPromptModal" class="primary" type="button">Insert into Chat ▶</button>
+    </div>
+  </div>
+</div>
+
+<!-- Cyber-Glass Microphone Access & Audio Studio Modal -->
+<div id="micModal" class="veil hidden">
+  <div class="veil-card mic-modal-card">
+    <div class="mic-modal-head">
+      <div class="mic-modal-title-wrap">
+        <div class="cyber-glyph-icon cyan-halo">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+            <line x1="12" y1="19" x2="12" y2="22"></line>
+          </svg>
+        </div>
+        <div>
+          <h3>Microphone Access &amp; Audio Studio</h3>
+          <span class="muted" style="font-size:0.75rem;">Local speech-to-text hardware &amp; browser permission control</span>
+        </div>
+      </div>
+      <button id="btnCloseMicModal" class="ghost-xs" type="button">✕</button>
+    </div>
+
+    <div class="mic-modal-body">
+      <!-- Status Badge Strip -->
+      <div class="mic-status-strip">
+        <div class="mic-stat-item">
+          <span class="muted mic-stat-label">BROWSER CONTEXT</span>
+          <span id="micContextStatus" class="mic-stat-val val-green">Secure (Localhost)</span>
+        </div>
+        <div class="mic-stat-item">
+          <span class="muted mic-stat-label">PERMISSION STATE</span>
+          <span id="micPermStatus" class="mic-stat-val val-amber">Checking…</span>
+        </div>
+        <div class="mic-stat-item">
+          <span class="muted mic-stat-label">TRANSLATION ENGINE</span>
+          <span class="mic-stat-val val-cyan">Faster-Whisper (Local)</span>
+        </div>
+      </div>
+
+      <!-- Permission Recovery Guide (shown if blocked) -->
+      <div id="micTroubleshootCard" class="mic-troubleshoot-box hidden">
+        <div class="troubleshoot-header">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4m0 4h.01"/></svg>
+          <span id="micErrorTitle">Microphone Permission Blocked</span>
+        </div>
+        <p id="micErrorDesc" class="muted" style="font-size:0.78rem; margin:6px 0 10px;"></p>
+        <div class="troubleshoot-steps">
+          <div class="step-row">
+            <span class="step-num">1</span>
+            <span id="micBrowserStep1">In your browser URL bar, click the crossed-out microphone or permission settings icon on the left of <code>localhost:8123</code>.</span>
+          </div>
+          <div class="step-row">
+            <span class="step-num">2</span>
+            <span>Change <b>Microphone</b> permission from <i>Blocked</i> to <b>Allow</b>.</span>
+          </div>
+          <div class="step-row">
+            <span class="step-num">3</span>
+            <span>Click <b>"Retry Microphone Access"</b> below or reload the tab.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Audio Input Device Selector -->
+      <div class="mic-field-group">
+        <label for="micDeviceSelect" class="mic-field-label">Active Audio Input Device</label>
+        <select id="micDeviceSelect" class="cyber-select">
+          <option value="">Default System Microphone</option>
+        </select>
+      </div>
+
+      <!-- Live VU Meter & Audio Test -->
+      <div class="mic-test-container">
+        <div class="mic-test-header">
+          <span class="mic-field-label">Live Signal Monitor &amp; VU Meter</span>
+          <span id="micVuDb" class="mic-vu-db">0%</span>
+        </div>
+        <div class="mic-vu-track">
+          <div id="micTestVuBar" class="mic-vu-fill" style="width: 0%;"></div>
+        </div>
+        <div class="mic-test-btns">
+          <button id="btnTestMic" type="button" class="cyber-btn ghost">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <span id="btnTestMicText">Start Live Signal Test</span>
+          </button>
+          <span id="micTestStatus" class="muted" style="font-size:0.75rem;">Speak to verify audio capture…</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="mic-modal-footer">
+      <button id="btnRequestMicPerm" class="cyber-btn primary-cyan" type="button">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+        <span>Request / Reset Mic Permission</span>
+      </button>
+      <button id="btnDismissMicModal" class="cyber-btn ghost" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+<div id="confirmVeil" class="veil hidden">
+  <div class="veil-card">
+    <p id="confirmText"></p>
+    <div class="row"><button id="confirmNo" class="ghost">Cancel</button><button id="confirmYes" class="primary danger-bg">Confirm</button></div>
+  </div>
+</div>
+
+<script src="/static/app.js?v=4.5"></script>
+</body>
+</html>
