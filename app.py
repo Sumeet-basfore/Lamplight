@@ -26,6 +26,7 @@ import db
 import dev_workbench
 import knowledge_library
 import model_intelligence
+import story_studio
 
 OLLAMA_URL = "http://localhost:11434"
 KEEP_ALIVE = "30m"
@@ -1632,6 +1633,23 @@ def _build_messages(mode: str, user_msg: str | None, session_id: str | None = No
                     "The following verified excerpts were retrieved from the user's indexed Knowledge Library for this workspace. "
                     "Cite the document title when referencing these passages, and distinguish direct sources from inferences:\n" +
                     "\n".join(k_blocks)
+                )
+        except Exception:
+            pass
+
+    # 8. Story Studio Canon Bible Injection (Pillar 5)
+    if mode == "muse" or (eff_ws_id and eff_ws_id != "ws_default"):
+        try:
+            canon_ents = story_studio.list_story_entities(eff_ws_id, canon_status="canon")
+            if canon_ents:
+                lines = []
+                for ent in canon_ents[:15]:
+                    lines.append(f"- [{ent['entity_type'].upper()}] {ent['name']}: {ent['summary']}")
+                sys_blocks.append(
+                    "### [ESTABLISHED STORY CANON BIBLE]\n"
+                    "The author has registered the following established canon characters, locations, factions, and world rules. "
+                    "Maintain strict narrative continuity with these established facts:\n" +
+                    "\n".join(lines)
                 )
         except Exception:
             pass
@@ -4051,6 +4069,372 @@ def muse_clear():
     db.set_setting("muse_rules", "")
     db.clear_mode("muse")
     return {"ok": True}
+
+
+# ============================================================================
+# Pillar 5: Story Studio, Worldbuilding & Mini-App Workshop API
+# ============================================================================
+
+class StoryEntityIn(BaseModel):
+    entity_type: str = "character"  # character, location, faction, world_rule, event, item
+    name: str
+    summary: str = ""
+    details: Any = {}
+    attributes: Any = {}
+    canon_status: str = "canon"
+    tags: Any = ""
+    workspace_id: str | None = None
+    id: str | None = None
+
+
+class StorySceneIn(BaseModel):
+    title: str = "Untitled Scene"
+    summary: str = ""
+    act_or_chapter: str = "Act 1"
+    act: str | None = None
+    pov_character_id: str | None = None
+    pov_character: str | None = None
+    location_id: str | None = None
+    location: str | None = None
+    content: str = ""
+    status: str = "draft"
+    canon_status: str | None = None
+    conflict: str = ""
+    order_index: int = 0
+    workspace_id: str | None = None
+    version_note: str = ""
+    id: str | None = None
+
+
+class ContinuityCheckIn(BaseModel):
+    scene_text: str = ""
+    content: str = ""
+    title: str = ""
+    pov_character: str = ""
+    location: str = ""
+    workspace_id: str | None = None
+    model: str | None = None
+
+
+class WorldMapNodeIn(BaseModel):
+    map_id: str | None = None
+    name: str
+    node_type: str = "citadel"
+    x: int = 500
+    y: int = 350
+    era_start: int = 1
+    era_end: int = 5
+    era_min: int | None = None
+    era_max: int | None = None
+    faction_id: str | None = None
+    faction: str | None = None
+    resources: str = ""
+    description: str = ""
+    details: Any = {}
+
+
+class WorldMapRouteIn(BaseModel):
+    map_id: str | None = None
+    from_node_id: str
+    to_node_id: str
+    route_type: str = "road"
+    distance_leagues: float = 10.0
+    danger_level: str = "moderate"
+    era_min: int = 1
+    era_max: int = 5
+
+
+class MiniAppIn(BaseModel):
+    title: str
+    description: str = ""
+    category: str = "writing"
+    html_code: str = ""
+    html: str = ""
+    css_code: str = ""
+    css: str = ""
+    js_code: str = ""
+    js: str = ""
+    icon: str = "⚡"
+    is_pinned: int = 0
+    storage: dict = {}
+    workspace_id: str | None = None
+    id: str | None = None
+
+
+class MiniAppStorageIn(BaseModel):
+    storage_data: dict | None = None
+    key: str | None = None
+    value: Any = None
+
+
+@app.get("/api/story/entities")
+def story_entities_list(workspace_id: str | None = None, entity_type: str | None = None,
+                        canon_status: str | None = None, q: str | None = None,
+                        x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    ents = story_studio.list_story_entities(workspace_id=workspace_id or "ws_default",
+                                            entity_type=entity_type,
+                                            canon_status=canon_status,
+                                            query=q)
+    return {"ok": True, "entities": ents}
+
+
+@app.post("/api/story/entities")
+def story_entity_save(body: StoryEntityIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    if not body.name.strip():
+        raise HTTPException(400, "Entity name required")
+    details = body.details or body.attributes or {}
+    if body.id:
+        ent = story_studio.update_story_entity(
+            entity_id=body.id,
+            name=body.name,
+            summary=body.summary,
+            details=details,
+            canon_status=body.canon_status,
+            tags=body.tags
+        )
+    else:
+        ent = story_studio.create_story_entity(
+            workspace_id=body.workspace_id or "ws_default",
+            entity_type=body.entity_type,
+            name=body.name,
+            summary=body.summary,
+            details=details,
+            canon_status=body.canon_status,
+            tags=body.tags
+        )
+    return {"ok": True, "entity": ent}
+
+
+@app.delete("/api/story/entities/{entity_id}")
+def story_entity_delete(entity_id: str, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    ok = story_studio.delete_story_entity(entity_id)
+    return {"ok": ok}
+
+
+@app.get("/api/story/graph")
+def story_graph_get(workspace_id: str | None = None, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    graph = story_studio.get_relationship_graph(workspace_id or "ws_default")
+    return {"ok": True, "graph": graph}
+
+
+@app.get("/api/story/scenes")
+def story_scenes_list(workspace_id: str | None = None, act_or_chapter: str | None = None,
+                      x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    scenes = story_studio.list_story_scenes(workspace_id or "ws_default", act_or_chapter=act_or_chapter)
+    return {"ok": True, "scenes": scenes}
+
+
+@app.post("/api/story/scenes")
+def story_scene_save(body: StorySceneIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    if not body.title.strip():
+        raise HTTPException(400, "Scene title required")
+    act = body.act or body.act_or_chapter or "Act 1"
+    status = body.canon_status or body.status or "draft"
+    pov = body.pov_character or body.pov_character_id
+    loc = body.location or body.location_id
+    if body.id:
+        scn = story_studio.update_story_scene(
+            scene_id=body.id,
+            title=body.title,
+            summary=body.summary,
+            content=body.content,
+            status=status,
+            conflict=body.conflict,
+            act_or_chapter=act,
+            order_index=body.order_index,
+            version_note=body.version_note
+        )
+    else:
+        scn = story_studio.create_story_scene(
+            workspace_id=body.workspace_id or "ws_default",
+            act_or_chapter=act,
+            title=body.title,
+            summary=body.summary,
+            pov_character_id=pov,
+            location_id=loc,
+            content=body.content,
+            status=status,
+            conflict=body.conflict,
+            order_index=body.order_index
+        )
+    return {"ok": True, "scene": scn}
+
+
+@app.get("/api/story/scenes/{scene_id}/versions")
+def story_scene_versions(scene_id: str, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    vers = story_studio.list_scene_versions(scene_id)
+    return {"ok": True, "versions": vers}
+
+
+@app.delete("/api/story/scenes/{scene_id}")
+def story_scene_delete(scene_id: str, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    ok = story_studio.delete_story_scene(scene_id)
+    return {"ok": ok}
+
+
+@app.post("/api/story/continuity")
+def story_continuity_check(body: ContinuityCheckIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    scene_text = body.scene_text or body.content or ""
+    report = story_studio.check_scene_continuity(
+        workspace_id=body.workspace_id or "ws_default",
+        scene_text=scene_text,
+        model=body.model or "Qwen3.5-uncensored:latest"
+    )
+    return {"ok": True, "report": report}
+
+
+@app.get("/api/story/map")
+def story_map_get(workspace_id: str | None = None, era: int | None = None, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    m = story_studio.get_or_create_world_map(workspace_id or "ws_default")
+    details = story_studio.get_map_details(m["id"], era_index=era)
+    return {"ok": True, "map": details}
+
+
+@app.post("/api/story/map/nodes")
+def story_map_node_add(body: WorldMapNodeIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    map_id = body.map_id
+    if not map_id:
+        m = story_studio.get_or_create_world_map("ws_default")
+        map_id = m["id"]
+    era_start = body.era_min if body.era_min is not None else body.era_start
+    era_end = body.era_max if body.era_max is not None else body.era_end
+    faction = body.faction or body.faction_id
+    details = body.details or {}
+    if body.description and isinstance(details, dict):
+        details["description"] = body.description
+    res = story_studio.add_map_node(
+        map_id=map_id,
+        name=body.name,
+        node_type=body.node_type,
+        x=body.x,
+        y=body.y,
+        era_start=era_start,
+        era_end=era_end,
+        faction_id=faction,
+        resources=body.resources,
+        details=details
+    )
+    return {"ok": True, "node": res}
+
+
+@app.delete("/api/story/map/nodes/{node_id}")
+def story_map_node_delete(node_id: str, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    ok = story_studio.delete_map_node(node_id)
+    return {"ok": ok}
+
+
+@app.post("/api/story/map/routes")
+def story_map_route_add(body: WorldMapRouteIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    map_id = body.map_id
+    if not map_id:
+        m = story_studio.get_or_create_world_map("ws_default")
+        map_id = m["id"]
+    res = story_studio.add_map_route(
+        map_id=map_id,
+        from_node_id=body.from_node_id,
+        to_node_id=body.to_node_id,
+        route_type=body.route_type,
+        distance_leagues=body.distance_leagues,
+        danger_level=body.danger_level
+    )
+    return {"ok": True, "route": res}
+
+
+@app.get("/api/mini-apps")
+def mini_apps_list(workspace_id: str | None = None, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    apps = story_studio.list_mini_apps(workspace_id or "ws_default")
+    return {"ok": True, "apps": apps, "mini_apps": apps}
+
+
+@app.get("/api/mini-apps/{app_id}")
+def mini_app_get(app_id: str, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    app_data = story_studio.get_mini_app(app_id)
+    if not app_data:
+        raise HTTPException(404, "Mini-app not found")
+    return {"ok": True, "app": app_data}
+
+
+@app.post("/api/mini-apps")
+def mini_app_save(body: MiniAppIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    if not body.title.strip():
+        raise HTTPException(400, "Mini-app title required")
+    html_code = body.html_code or body.html or ""
+    css_code = body.css_code or body.css or ""
+    js_code = body.js_code or body.js or ""
+    app_data = story_studio.save_mini_app(
+        workspace_id=body.workspace_id or "ws_default",
+        title=body.title,
+        description=body.description,
+        category=body.category,
+        html_code=html_code,
+        css_code=css_code,
+        js_code=js_code,
+        icon=body.icon,
+        is_pinned=body.is_pinned,
+        app_id=body.id
+    )
+    return {"ok": True, "app": app_data}
+
+
+@app.delete("/api/mini-apps/{app_id}")
+def mini_app_delete(app_id: str, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    ok = story_studio.delete_mini_app(app_id)
+    return {"ok": ok}
+
+
+@app.post("/api/mini-apps/{app_id}/storage")
+def mini_app_storage_save(app_id: str, body: MiniAppStorageIn, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    storage = body.storage_data
+    if not storage and body.key:
+        storage = {body.key: body.value}
+    ok = story_studio.update_mini_app_storage(app_id, storage or {})
+    return {"ok": ok}
+
+
+@app.get("/api/mini-apps/{app_id}/export")
+def mini_app_export(app_id: str, x_passcode: str | None = Header(default=None)):
+    if not _passcode_ok(x_passcode):
+        raise HTTPException(423, "locked — unlock with passcode")
+    bundled_html = story_studio.bundle_mini_app_html(app_id)
+    from fastapi.responses import Response
+    return Response(content=bundled_html.encode("utf-8"), media_type="text/html",
+                    headers={"Content-Disposition": f"attachment; filename=mini-app-{app_id}.html"})
 
 
 # ==========================================================================

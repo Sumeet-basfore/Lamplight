@@ -871,7 +871,7 @@ function showApp() {
   $("btnMemory").classList.toggle("hidden", mode !== "friend");
   if ($("btnArchitectStack")) $("btnArchitectStack").classList.toggle("hidden", mode !== "architect");
   if ($("btnMuseBible")) $("btnMuseBible").classList.toggle("hidden", mode !== "muse");
-  wireTabs(); moveGlow(); loadPicker(); loadHistory(); loadSessions(mode); loadVramStatus(); wireThemes(); loadSkills(); wireSkills(); wireTts(); loadTtsSettings(); initTranscriptModal(); wireCanvas(); wireLab(); wireArena(); wireProviderForm(); wireDocHub(); wireObservatory(); wirePrompts(); wireWorkbenchMenu(); wireArchitect(); wireMuse(); wireThinkingLevels(); wireModelCartridge(); wireWebSearch(); wireTreg(); wireWorkspaces(); loadWorkspaces(); wireMemoryCenter(); wireBackups(); wireDevWorkbench(); wireKnowledgeStudio(); wireModelIntelligence();
+  wireTabs(); moveGlow(); loadPicker(); loadHistory(); loadSessions(mode); loadVramStatus(); wireThemes(); loadSkills(); wireSkills(); wireTts(); loadTtsSettings(); initTranscriptModal(); wireCanvas(); wireLab(); wireArena(); wireProviderForm(); wireDocHub(); wireObservatory(); wirePrompts(); wireWorkbenchMenu(); wireArchitect(); wireMuse(); wireThinkingLevels(); wireModelCartridge(); wireWebSearch(); wireTreg(); wireWorkspaces(); loadWorkspaces(); wireMemoryCenter(); wireBackups(); wireDevWorkbench(); wireKnowledgeStudio(); wireModelIntelligence(); wireStoryStudio();
 }
 
 document.addEventListener("click", (e) => {
@@ -4455,6 +4455,14 @@ function wireMuse() {
     };
   }
 
+  const btnOpenStudio = $("btnOpenStoryStudioFromMuse");
+  if (btnOpenStudio) {
+    btnOpenStudio.onclick = () => {
+      closeDrawers();
+      openStoryStudioModal();
+    };
+  }
+
   const btnSavePrompt = $("btnSaveMusePrompt");
   if (btnSavePrompt) btnSavePrompt.onclick = () => savePrompt("muse", "musePrompt");
 
@@ -8002,6 +8010,12 @@ function wireWorkbenchMenu() {
     closeDrawers();
     openDevWorkbench();
   });
+
+  $("wbItemStoryStudio")?.addEventListener("click", () => {
+    closeWorkbenchMenu();
+    closeDrawers();
+    openStoryStudioModal();
+  });
   // Global pill active state handling
   document.addEventListener("click", (e) => {
     const pill = e.target.closest(".cyber-pill");
@@ -10645,6 +10659,1031 @@ function renderMessageVerificationCard(bubbleEl, critiqueText, score) {
     </div>
   `;
   bubbleEl.appendChild(card);
+}
+
+/* ==========================================================================
+   PILLAR 5: STORY STUDIO, WORLDBUILDER & MINI-APP WORKSHOP CONTROLLER
+   ========================================================================== */
+
+let ssActiveTab = "ssPaneBible";
+let ssEntities = [];
+let ssScenes = [];
+let ssActiveScene = null;
+let ssSceneVersions = [];
+let ssCurrentEra = 3;
+let ssWorldMap = null;
+let ssSelectedNode = null;
+let ssMiniApps = [];
+let ssActiveMiniApp = null;
+let ssAppActiveMode = "run";
+let ssAppActiveCodeTab = "html";
+let ssGraphViewActive = false;
+
+const SS_ERA_NAMES = {
+  1: { name: "Era 1: Dawn of Creation & Mythic Age", desc: "Primordial relics, primordial sanctums, ancient ruins and forgotten powers." },
+  2: { name: "Era 2: Classical Age & Founding Dynasties", desc: "First kingdoms, foundation of ancient cities and early sea lanes." },
+  3: { name: "Era 3: Imperial High Era (Golden Age)", desc: "Flourishing citadels, bustling highways, stable trade routes and established factions." },
+  4: { name: "Era 4: The Great Calamity & The Rift", desc: "Fractured empires, corrupted leylines, perilous wilderness and fallen fortresses." },
+  5: { name: "Era 5: Modern Era & Renaissance", desc: "Restored harbors, mechanical innovation, rediscovery of arcane artifacts." }
+};
+
+function openStoryStudioModal(initialTab = "ssPaneBible") {
+  const modal = $("storyStudioModal");
+  if (!modal) return;
+  modal.classList.remove("hidden");
+  switchStoryStudioTab(initialTab);
+}
+
+function switchStoryStudioTab(tabId) {
+  ssActiveTab = tabId;
+  document.querySelectorAll(".ss-tab-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.getAttribute("data-tab") === tabId);
+  });
+  document.querySelectorAll(".ss-modal-body .ss-tab-pane").forEach(pane => {
+    pane.classList.toggle("hidden", pane.id !== tabId);
+  });
+
+  if (tabId === "ssPaneBible") {
+    loadStoryBible();
+  } else if (tabId === "ssPaneScenes") {
+    loadStoryScenes();
+  } else if (tabId === "ssPaneMap") {
+    loadWorldMap();
+  } else if (tabId === "ssPaneApps") {
+    loadMiniApps();
+  }
+}
+
+function wireStoryStudio() {
+  const modal = $("storyStudioModal");
+  if (!modal) return;
+
+  $("btnCloseStoryStudioModal")?.addEventListener("click", () => modal.classList.add("hidden"));
+  $("btnDismissStoryStudioModal")?.addEventListener("click", () => modal.classList.add("hidden"));
+
+  // Tab switching
+  document.querySelectorAll(".ss-tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const tabId = btn.getAttribute("data-tab");
+      if (tabId) switchStoryStudioTab(tabId);
+    });
+  });
+
+  // --- TAB 1: STORY BIBLE CONTROLS ---
+  $("ssFilterType")?.addEventListener("change", () => loadStoryBible());
+  $("ssFilterCanon")?.addEventListener("change", () => loadStoryBible());
+  $("ssSearchBible")?.addEventListener("input", () => loadStoryBible());
+
+  $("btnSsToggleGraph")?.addEventListener("click", () => {
+    ssGraphViewActive = !ssGraphViewActive;
+    $("ssEntitiesList")?.classList.toggle("hidden", ssGraphViewActive);
+    $("ssGraphContainer")?.classList.toggle("hidden", !ssGraphViewActive);
+    $("ssGraphToggleLabel").textContent = ssGraphViewActive ? "View Cards Grid" : "Relationship Graph";
+    if (ssGraphViewActive) renderStoryGraph();
+  });
+
+  $("btnSsNewEntity")?.addEventListener("click", () => openStoryEntityForm());
+  $("btnCancelStoryEntity")?.addEventListener("click", () => $("ssEntityFormCard")?.classList.add("hidden"));
+  $("btnSaveStoryEntity")?.addEventListener("click", () => saveStoryEntity());
+
+  // --- TAB 2: SCENE BOARD & DRAFTS CONTROLS ---
+  $("ssFilterAct")?.addEventListener("change", () => loadStoryScenes());
+  $("ssSearchScenes")?.addEventListener("input", () => loadStoryScenes());
+  $("btnSsNewScene")?.addEventListener("click", () => createNewStoryScene());
+  $("btnSaveStoryScene")?.addEventListener("click", () => saveStorySceneDraft());
+  $("btnAuditSceneContinuity")?.addEventListener("click", () => auditSceneContinuity());
+  $("btnCloseContinuityReport")?.addEventListener("click", () => $("ssContinuityPanel")?.classList.add("hidden"));
+
+  $("ssSceneContent")?.addEventListener("input", (e) => {
+    updateSceneWordCount(e.target.value);
+  });
+
+  $("ssSceneVersionsSelect")?.addEventListener("change", (e) => {
+    const versionId = e.target.value;
+    $("btnSsRollbackVersion").disabled = !versionId;
+  });
+
+  $("btnSsRollbackVersion")?.addEventListener("click", () => rollbackSelectedVersion());
+
+  // --- TAB 3: WORLDBUILDER MAP CONTROLS ---
+  $("ssEraSlider")?.addEventListener("input", (e) => {
+    ssCurrentEra = parseInt(e.target.value, 10);
+    loadWorldMap();
+  });
+
+  $("btnSsAddNodeQuick")?.addEventListener("click", () => {
+    $("ssAddNodeFormCard")?.classList.remove("hidden");
+    $("ssAddRouteFormCard")?.classList.add("hidden");
+    $("ssMapNodeInspector")?.classList.add("hidden");
+  });
+
+  $("btnCancelAddNode")?.addEventListener("click", () => {
+    $("ssAddNodeFormCard")?.classList.add("hidden");
+    $("ssMapNodeInspector")?.classList.remove("hidden");
+  });
+
+  $("btnSaveMapNode")?.addEventListener("click", () => saveMapNode());
+
+  $("btnSsAddRouteQuick")?.addEventListener("click", () => {
+    $("ssAddRouteFormCard")?.classList.remove("hidden");
+    $("ssAddNodeFormCard")?.classList.add("hidden");
+    $("ssMapNodeInspector")?.classList.add("hidden");
+  });
+
+  $("btnCancelAddRoute")?.addEventListener("click", () => {
+    $("ssAddRouteFormCard")?.classList.add("hidden");
+    $("ssMapNodeInspector")?.classList.remove("hidden");
+  });
+
+  $("btnSaveMapRoute")?.addEventListener("click", () => saveMapRoute());
+  $("btnSsDeleteNode")?.addEventListener("click", () => deleteCurrentMapNode());
+
+  $("btnSsResetMapZoom")?.addEventListener("click", () => {
+    const svg = $("ssWorldMapSvg");
+    if (svg) svg.setAttribute("viewBox", "0 0 1000 600");
+  });
+
+  // --- TAB 4: MINI-APP WORKSHOP CONTROLS ---
+  $("btnSsNewApp")?.addEventListener("click", () => createNewMiniApp());
+
+  $("btnSsModeRun")?.addEventListener("click", () => {
+    setMiniAppMode("run");
+  });
+
+  $("btnSsModeCode")?.addEventListener("click", () => {
+    setMiniAppMode("code");
+  });
+
+  document.querySelectorAll(".ss-code-tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".ss-code-tab").forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      const mode = tab.getAttribute("data-codetab");
+      ssAppActiveCodeTab = mode;
+      $("ssAppEditHtml")?.classList.toggle("hidden", mode !== "html");
+      $("ssAppEditCss")?.classList.toggle("hidden", mode !== "css");
+      $("ssAppEditJs")?.classList.toggle("hidden", mode !== "js");
+    });
+  });
+
+  $("btnSaveMiniAppCode")?.addEventListener("click", () => saveMiniAppCode());
+  $("btnExportMiniAppHtml")?.addEventListener("click", () => exportActiveMiniApp());
+
+  // Listen for postMessage from sandboxed mini-apps
+  window.addEventListener("message", async (event) => {
+    if (event.data && event.data.type === "MINI_APP_SET_STORAGE") {
+      if (ssActiveMiniApp && event.data.key) {
+        try {
+          await api(`/api/mini-apps/${ssActiveMiniApp.id}/storage`, {
+            method: "POST",
+            body: JSON.stringify({ key: event.data.key, value: event.data.value })
+          });
+        } catch (err) {
+          console.warn("Storage sync failed:", err);
+        }
+      }
+    }
+  });
+}
+
+/* ---------- TAB 1: STORY BIBLE IMPLEMENTATION ---------- */
+async function loadStoryBible() {
+  const container = $("ssEntitiesList");
+  if (!container) return;
+
+  const type = $("ssFilterType")?.value || "";
+  const canon = $("ssFilterCanon")?.value || "";
+  const q = $("ssFilterSearch")?.value || $("ssSearchBible")?.value || "";
+
+  try {
+    const params = new URLSearchParams();
+    if (type) params.set("type", type);
+    if (canon) params.set("canon_status", canon);
+    if (q) params.set("q", q);
+
+    const res = await api(`/api/story/entities?${params.toString()}`);
+    ssEntities = res.entities || [];
+
+    if (ssGraphViewActive) {
+      renderStoryGraph();
+      return;
+    }
+
+    if (ssEntities.length === 0) {
+      container.innerHTML = `<div class="muted ss-empty-state">No entities match your filter. Click "+ Add Lore Entity" to register characters, factions, and rules into the canon bible.</div>`;
+      return;
+    }
+
+    container.innerHTML = ssEntities.map(ent => {
+      let tagsHtml = "";
+      if (Array.isArray(ent.tags) && ent.tags.length > 0) {
+        tagsHtml = `<div class="ss-entity-tags">${ent.tags.map(t => `<span class="ss-tag-pill">#${esc(t)}</span>`).join("")}</div>`;
+      }
+      return `
+        <div class="ss-entity-card" data-entity-id="${esc(ent.id)}">
+          <div class="ss-entity-header">
+            <div>
+              <span class="ss-entity-title">${esc(ent.name)}</span>
+            </div>
+            <div style="display:flex; gap:4px; align-items:center;">
+              <span class="ss-type-badge ss-type-${esc(ent.entity_type)}">${esc(ent.entity_type.replace('_', ' '))}</span>
+              <span class="ss-canon-badge ss-canon-${esc(ent.canon_status)}">${esc(ent.canon_status)}</span>
+            </div>
+          </div>
+          <p class="ss-entity-summary">${esc(ent.summary || "No summary recorded.")}</p>
+          ${tagsHtml}
+          <div class="ss-entity-actions">
+            <button type="button" class="cyber-btn ghost-sm" onclick="editStoryEntity('${esc(ent.id)}')">Edit</button>
+            <button type="button" class="cyber-btn ghost-sm danger" onclick="deleteStoryEntity('${esc(ent.id)}')">Delete</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+  } catch (err) {
+    container.innerHTML = `<div class="danger" style="padding:16px;">Error loading story bible: ${esc(err.message)}</div>`;
+  }
+}
+
+function openStoryEntityForm(entity = null) {
+  const form = $("ssEntityFormCard");
+  if (!form) return;
+  form.classList.remove("hidden");
+
+  if (entity) {
+    $("ssEntityFormTitle").textContent = "Edit Lore Entity";
+    $("ssEntityId").value = entity.id || "";
+    $("ssEntityName").value = entity.name || "";
+    $("ssEntityType").value = entity.entity_type || "character";
+    $("ssEntityCanon").value = entity.canon_status || "canon";
+    $("ssEntityTags").value = Array.isArray(entity.tags) ? entity.tags.join(", ") : "";
+    $("ssEntitySummary").value = entity.summary || "";
+    $("ssEntityAttrs").value = entity.attributes ? JSON.stringify(entity.attributes) : "";
+    $("ssEntityDetails").value = entity.details || "";
+  } else {
+    $("ssEntityFormTitle").textContent = "New Lore Entity";
+    $("ssEntityId").value = "";
+    $("ssEntityName").value = "";
+    $("ssEntityType").value = "character";
+    $("ssEntityCanon").value = "canon";
+    $("ssEntityTags").value = "";
+    $("ssEntitySummary").value = "";
+    $("ssEntityAttrs").value = "";
+    $("ssEntityDetails").value = "";
+  }
+  $("ssEntityName")?.focus();
+}
+
+function editStoryEntity(id) {
+  const entity = ssEntities.find(e => e.id === id);
+  if (entity) openStoryEntityForm(entity);
+}
+
+async function saveStoryEntity() {
+  const id = $("ssEntityId")?.value.trim() || undefined;
+  const name = $("ssEntityName")?.value.trim();
+  const entity_type = $("ssEntityType")?.value;
+  const canon_status = $("ssEntityCanon")?.value;
+  const tagsStr = $("ssEntityTags")?.value.trim();
+  const summary = $("ssEntitySummary")?.value.trim();
+  const attrsStr = $("ssEntityAttrs")?.value.trim();
+  const details = $("ssEntityDetails")?.value.trim();
+
+  if (!name) {
+    toast("Entity name is required", true);
+    return;
+  }
+
+  let tags = [];
+  if (tagsStr) {
+    tags = tagsStr.split(",").map(t => t.trim()).filter(Boolean);
+  }
+
+  let attributes = {};
+  if (attrsStr) {
+    try {
+      attributes = JSON.parse(attrsStr);
+    } catch (e) {
+      toast("Invalid JSON attributes format", true);
+      return;
+    }
+  }
+
+  try {
+    await api("/api/story/entities", {
+      method: "POST",
+      body: JSON.stringify({
+        id,
+        name,
+        entity_type,
+        canon_status,
+        tags,
+        summary,
+        attributes,
+        details
+      })
+    });
+    toast(`Entity "${name}" saved to Story Bible`);
+    $("ssEntityFormCard")?.classList.add("hidden");
+    loadStoryBible();
+  } catch (err) {
+    toast("Failed to save entity: " + err.message, true);
+  }
+}
+
+async function deleteStoryEntity(id) {
+  const ent = ssEntities.find(e => e.id === id);
+  const name = ent ? ent.name : "entity";
+  const ok = await askConfirm(`Delete "${name}" from the Story Bible?`);
+  if (!ok) return;
+
+  try {
+    await api(`/api/story/entities/${id}`, { method: "DELETE" });
+    toast(`Deleted entity "${name}"`);
+    loadStoryBible();
+  } catch (err) {
+    toast("Failed to delete entity: " + err.message, true);
+  }
+}
+
+async function renderStoryGraph() {
+  const svg = $("ssGraphSvg");
+  if (!svg) return;
+
+  try {
+    const res = await api("/api/story/graph");
+    const nodes = res.nodes || [];
+    const edges = res.edges || [];
+
+    $("ssGraphStats").textContent = `${nodes.length} nodes • ${edges.length} connections`;
+
+    if (nodes.length === 0) {
+      svg.innerHTML = `<text x="50%" y="50%" text-anchor="middle" fill="#64748b" font-size="13">No entities found. Add characters, factions, and rules to build the graph.</text>`;
+      return;
+    }
+
+    const width = svg.clientWidth || 800;
+    const height = 450;
+    const cx = width / 2;
+    const cy = height / 2;
+    const radius = Math.min(width, height) * 0.38;
+
+    // Arrange nodes along circle or connected positions
+    nodes.forEach((node, i) => {
+      const angle = (i / nodes.length) * 2 * Math.PI;
+      node.x = cx + radius * Math.cos(angle);
+      node.y = cy + radius * Math.sin(angle);
+    });
+
+    const nodeMap = new Map();
+    nodes.forEach(n => nodeMap.set(n.id, n));
+
+    let edgesHtml = edges.map(edge => {
+      const source = nodeMap.get(edge.source);
+      const target = nodeMap.get(edge.target);
+      if (!source || !target) return "";
+      return `<line x1="${source.x}" y1="${source.y}" x2="${target.x}" y2="${target.y}" stroke="rgba(244,63,94,0.3)" stroke-width="1.5" stroke-dasharray="3,3" />`;
+    }).join("");
+
+    const typeColors = {
+      character: "#3b82f6",
+      location: "#10b981",
+      faction: "#a855f7",
+      rule: "#f59e0b",
+      lore_event: "#f43f5e"
+    };
+
+    let nodesHtml = nodes.map(node => {
+      const color = typeColors[node.type] || "#cbd5e1";
+      return `
+        <g class="ss-graph-node" style="cursor:pointer;" onclick="editStoryEntity('${esc(node.id)}')">
+          <circle cx="${node.x}" cy="${node.y}" r="12" fill="${color}" fill-opacity="0.8" stroke="#fff" stroke-width="1.5" filter="drop-shadow(0 0 6px ${color})" />
+          <text x="${node.x}" y="${node.y + 24}" fill="#e2e8f0" font-size="11" font-weight="600" text-anchor="middle">${esc(node.name)}</text>
+        </g>
+      `;
+    }).join("");
+
+    svg.innerHTML = edgesHtml + nodesHtml;
+  } catch (err) {
+    svg.innerHTML = `<text x="50%" y="50%" text-anchor="middle" fill="#ef4444" font-size="12">Graph render error: ${esc(err.message)}</text>`;
+  }
+}
+
+/* ---------- TAB 2: SCENE BOARD & DRAFTS IMPLEMENTATION ---------- */
+async function loadStoryScenes() {
+  const container = $("ssScenesList");
+  if (!container) return;
+
+  const act = $("ssFilterAct")?.value || "";
+  const q = $("ssSearchScenes")?.value || "";
+
+  try {
+    const params = new URLSearchParams();
+    if (act) params.set("act", act);
+    if (q) params.set("q", q);
+
+    const res = await api(`/api/story/scenes?${params.toString()}`);
+    ssScenes = res.scenes || [];
+
+    if (ssScenes.length === 0) {
+      container.innerHTML = `<div class="muted ss-empty-state">No scenes match your filter. Click "+ New Scene Draft" to begin drafting.</div>`;
+      return;
+    }
+
+    container.innerHTML = ssScenes.map(sc => {
+      const isSelected = ssActiveScene && ssActiveScene.id === sc.id;
+      return `
+        <div class="ss-scene-card ${isSelected ? 'selected' : ''}" onclick="selectStoryScene('${esc(sc.id)}')">
+          <div class="ss-scene-card-head">
+            <span class="ss-scene-card-title">${esc(sc.title)}</span>
+            <span class="ss-canon-badge ss-canon-${esc(sc.canon_status)}">${esc(sc.canon_status)}</span>
+          </div>
+          <div class="ss-scene-card-meta">
+            ${sc.act ? `<span>📖 ${esc(sc.act)}</span>` : ''}
+            ${sc.pov_character ? `<span>👤 ${esc(sc.pov_character)}</span>` : ''}
+            <span>✍️ ${sc.word_count || 0} words</span>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    if (!ssActiveScene && ssScenes.length > 0) {
+      selectStoryScene(ssScenes[0].id);
+    }
+  } catch (err) {
+    container.innerHTML = `<div class="danger" style="padding:16px;">Error loading scenes: ${esc(err.message)}</div>`;
+  }
+}
+
+async function selectStoryScene(id) {
+  const sc = ssScenes.find(s => s.id === id);
+  if (!sc) return;
+  ssActiveScene = sc;
+
+  document.querySelectorAll(".ss-scene-card").forEach(c => {
+    c.classList.toggle("selected", c.getAttribute("onclick")?.includes(id));
+  });
+
+  $("ssSceneId").value = sc.id;
+  $("ssSceneTitle").value = sc.title || "";
+  $("ssSceneAct").value = sc.act || "";
+  $("ssScenePov").value = sc.pov_character || "";
+  $("ssSceneLocation").value = sc.location || "";
+  $("ssSceneConflict").value = sc.conflict || "";
+  $("ssSceneCanon").value = sc.canon_status || "draft";
+  $("ssSceneContent").value = sc.content || "";
+
+  updateSceneWordCount(sc.content || "");
+  $("ssContinuityPanel")?.classList.add("hidden");
+
+  // Load versions
+  loadSceneVersions(sc.id);
+}
+
+function updateSceneWordCount(text) {
+  const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+  const chars = text.length;
+  if ($("ssSceneWordCount")) $("ssSceneWordCount").textContent = `${words.toLocaleString()} words`;
+  if ($("ssSceneCharCount")) $("ssSceneCharCount").textContent = `${chars.toLocaleString()} chars`;
+}
+
+function createNewStoryScene() {
+  ssActiveScene = null;
+  $("ssSceneId").value = "";
+  $("ssSceneTitle").value = "New Scene Draft";
+  $("ssSceneAct").value = "Act 1";
+  $("ssScenePov").value = "";
+  $("ssSceneLocation").value = "";
+  $("ssSceneConflict").value = "";
+  $("ssSceneCanon").value = "draft";
+  $("ssSceneContent").value = "";
+  updateSceneWordCount("");
+  $("ssSceneVersionsSelect").innerHTML = `<option value="">Current Draft</option>`;
+  $("btnSsRollbackVersion").disabled = true;
+  $("ssContinuityPanel")?.classList.add("hidden");
+  $("ssSceneTitle")?.focus();
+}
+
+async function saveStorySceneDraft() {
+  const id = $("ssSceneId")?.value.trim() || undefined;
+  const title = $("ssSceneTitle")?.value.trim() || "Untitled Scene";
+  const act = $("ssSceneAct")?.value.trim();
+  const pov_character = $("ssScenePov")?.value.trim();
+  const location = $("ssSceneLocation")?.value.trim();
+  const conflict = $("ssSceneConflict")?.value.trim();
+  const canon_status = $("ssSceneCanon")?.value || "draft";
+  const content = $("ssSceneContent")?.value || "";
+
+  try {
+    const res = await api("/api/story/scenes", {
+      method: "POST",
+      body: JSON.stringify({
+        id,
+        title,
+        act,
+        pov_character,
+        location,
+        conflict,
+        canon_status,
+        content
+      })
+    });
+    toast(`Saved scene "${title}" and recorded snapshot`);
+    await loadStoryScenes();
+    if (res.scene && res.scene.id) {
+      selectStoryScene(res.scene.id);
+    }
+  } catch (err) {
+    toast("Failed to save scene: " + err.message, true);
+  }
+}
+
+async function loadSceneVersions(sceneId) {
+  const select = $("ssSceneVersionsSelect");
+  if (!select) return;
+
+  try {
+    const res = await api(`/api/story/scenes/${sceneId}/versions`);
+    ssSceneVersions = res.versions || [];
+
+    if (ssSceneVersions.length === 0) {
+      select.innerHTML = `<option value="">Current Draft (v1)</option>`;
+      $("btnSsRollbackVersion").disabled = true;
+      return;
+    }
+
+    select.innerHTML = `<option value="">Current Draft</option>` + ssSceneVersions.map(v => {
+      const date = new Date(v.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return `<option value="${esc(v.id)}">v${v.version_num}: ${esc(v.summary || 'Snapshot')} (${date}, ${v.word_count}w)</option>`;
+    }).join("");
+
+    $("btnSsRollbackVersion").disabled = true;
+  } catch (err) {
+    console.warn("Failed to load scene versions:", err);
+  }
+}
+
+async function rollbackSelectedVersion() {
+  const versionId = $("ssSceneVersionsSelect")?.value;
+  if (!versionId) return;
+
+  const ver = ssSceneVersions.find(v => v.id === versionId);
+  if (!ver) return;
+
+  const ok = await askConfirm(`Rollback scene to Version ${ver.version_num} (${ver.word_count} words)? Current unsaved edits will be replaced.`);
+  if (!ok) return;
+
+  $("ssSceneContent").value = ver.content || "";
+  updateSceneWordCount(ver.content || "");
+  toast(`Restored content from Version ${ver.version_num}`);
+  saveStorySceneDraft();
+}
+
+async function auditSceneContinuity() {
+  const title = $("ssSceneTitle")?.value.trim() || "Untitled Scene";
+  const content = $("ssSceneContent")?.value.trim();
+  const pov_character = $("ssScenePov")?.value.trim();
+  const location = $("ssSceneLocation")?.value.trim();
+
+  if (!content) {
+    toast("Please enter scene draft text to audit continuity", true);
+    return;
+  }
+
+  const panel = $("ssContinuityPanel");
+  panel?.classList.remove("hidden");
+  $("ssContinuityStatusBadge").className = "badge";
+  $("ssContinuityStatusBadge").textContent = "AUDITING CANON...";
+  $("ssContinuitySummary").textContent = "Analyzing draft against registered Story Bible entities, locations, factions, and rules...";
+  $("ssContinuityIssuesList").innerHTML = `<div class="muted" style="padding:10px;">Evaluating point of view consistency, geographic constraints, and lore contradictions...</div>`;
+
+  try {
+    const report = await api("/api/story/continuity", {
+      method: "POST",
+      body: JSON.stringify({
+        title,
+        content,
+        pov_character,
+        location
+      })
+    });
+
+    const status = report.overall_status || "COMPLIANT";
+    const badge = $("ssContinuityStatusBadge");
+    if (status === "COMPLIANT") {
+      badge.className = "badge ss-canon-canon";
+      badge.textContent = "✅ CANON COMPLIANT";
+    } else if (status === "DELIBERATE_AMBIGUITY") {
+      badge.className = "badge ss-canon-hypothesis";
+      badge.textContent = "🎭 ARTISTIC AMBIGUITY";
+    } else {
+      badge.className = "badge ss-canon-discarded";
+      badge.textContent = "⚠️ LORE INCONSISTENCIES FOUND";
+    }
+
+    $("ssContinuitySummary").textContent = report.summary || "Audit complete.";
+
+    const issues = report.issues || [];
+    if (issues.length === 0) {
+      $("ssContinuityIssuesList").innerHTML = `<div class="muted" style="padding:8px; color:#4ade80;">No lore breaks detected. Scene adheres cleanly to established story facts.</div>`;
+    } else {
+      $("ssContinuityIssuesList").innerHTML = issues.map(iss => {
+        let typeClass = "ss-issue-warning";
+        let icon = "⚠️";
+        if (iss.type === "lorebreak") { typeClass = "ss-issue-lorebreak"; icon = "❌"; }
+        if (iss.type === "ambiguity") { typeClass = "ss-issue-ambiguity"; icon = "👁️"; }
+
+        return `
+          <div class="ss-continuity-issue ${typeClass}">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <strong>${icon} ${esc(iss.type.toUpperCase())}</strong>
+              ${iss.canon_entity ? `<span class="badge" style="font-size:0.65rem;">Ref: ${esc(iss.canon_entity)}</span>` : ''}
+            </div>
+            <div>${esc(iss.message)}</div>
+            ${iss.suggestion ? `<div class="muted" style="margin-top:4px; font-size:0.75rem;">💡 Suggestion: ${esc(iss.suggestion)}</div>` : ''}
+          </div>
+        `;
+      }).join("");
+    }
+  } catch (err) {
+    $("ssContinuityStatusBadge").className = "badge ss-canon-discarded";
+    $("ssContinuityStatusBadge").textContent = "AUDIT ERROR";
+    $("ssContinuitySummary").textContent = "Failed to run audit: " + err.message;
+    $("ssContinuityIssuesList").innerHTML = "";
+  }
+}
+
+/* ---------- TAB 3: WORLDBUILDER MAP & ERAS IMPLEMENTATION ---------- */
+async function loadWorldMap() {
+  const eraInfo = SS_ERA_NAMES[ssCurrentEra] || SS_ERA_NAMES[3];
+  $("ssCurrentEraName").textContent = eraInfo.name;
+  $("ssEraDescription").textContent = eraInfo.desc;
+  if ($("ssEraSlider")) $("ssEraSlider").value = ssCurrentEra;
+
+  try {
+    const res = await api(`/api/story/map?era=${ssCurrentEra}`);
+    ssWorldMap = res;
+    renderWorldMapSvg();
+    populateRouteNodeOptions();
+  } catch (err) {
+    console.warn("Failed to load world map:", err);
+  }
+}
+
+function renderWorldMapSvg() {
+  const routesLayer = $("ssMapRoutesLayer");
+  const nodesLayer = $("ssMapNodesLayer");
+  if (!routesLayer || !nodesLayer || !ssWorldMap) return;
+
+  routesLayer.innerHTML = "";
+  nodesLayer.innerHTML = "";
+
+  const nodes = ssWorldMap.nodes || [];
+  const routes = ssWorldMap.routes || [];
+  const nodeMap = new Map();
+  nodes.forEach(n => nodeMap.set(n.id, n));
+
+  // Render Routes
+  const routeColors = {
+    road: "#f59e0b",
+    sea_lane: "#06b6d4",
+    portal: "#a855f7",
+    caravan: "#94a3b8"
+  };
+
+  let routesHtml = routes.map(r => {
+    const s = nodeMap.get(r.from_node_id);
+    const t = nodeMap.get(r.to_node_id);
+    if (!s || !t) return "";
+
+    const strokeColor = routeColors[r.route_type] || "#f59e0b";
+    const isDashed = r.route_type === "sea_lane" || r.route_type === "caravan";
+    const strokeWidth = r.danger_level === "perilous" ? 3 : 2;
+
+    return `
+      <line class="ss-route-line" x1="${s.x}" y1="${s.y}" x2="${t.x}" y2="${t.y}"
+            stroke="${strokeColor}" stroke-width="${strokeWidth}"
+            stroke-dasharray="${isDashed ? '6,4' : 'none'}"
+            opacity="0.8" />
+    `;
+  }).join("");
+  routesLayer.innerHTML = routesHtml;
+
+  // Render Nodes
+  const nodeColors = {
+    citadel: "#f43f5e",
+    settlement: "#3b82f6",
+    port: "#06b6d4",
+    ruin: "#a855f7",
+    sanctum: "#10b981"
+  };
+
+  let nodesHtml = nodes.map(n => {
+    const fill = nodeColors[n.node_type] || "#3b82f6";
+    return `
+      <g class="ss-node-group" onclick="inspectMapNode('${esc(n.id)}')">
+        <circle cx="${n.x}" cy="${n.y}" r="14" fill="${fill}" fill-opacity="0.25" filter="url(#ssGlow)" />
+        <circle class="ss-node-circle" cx="${n.x}" cy="${n.y}" r="8" fill="${fill}" stroke="#fff" stroke-width="1.8" />
+        <text class="ss-node-label" x="${n.x}" y="${n.y + 19}">${esc(n.name)}</text>
+      </g>
+    `;
+  }).join("");
+  nodesLayer.innerHTML = nodesHtml;
+}
+
+function inspectMapNode(nodeId) {
+  if (!ssWorldMap) return;
+  const node = (ssWorldMap.nodes || []).find(n => n.id === nodeId);
+  if (!node) return;
+
+  ssSelectedNode = node;
+  $("ssInspectorEmptyState")?.classList.add("hidden");
+  $("ssInspectorContent")?.classList.remove("hidden");
+  $("btnSsDeleteNode")?.classList.remove("hidden");
+
+  $("ssInspectorNodeName").textContent = node.name;
+  $("ssInspType").textContent = (node.node_type || "landmark").toUpperCase();
+  $("ssInspFaction").textContent = node.faction || "Independent / Unaligned";
+  $("ssInspEras").textContent = `Active from Era ${node.era_min || 1} to Era ${node.era_max || 5}`;
+  $("ssInspCoords").textContent = `X: ${node.x}, Y: ${node.y}`;
+  $("ssInspDesc").textContent = node.description || "No lore notes recorded.";
+
+  $("ssMapNodeInspector")?.classList.remove("hidden");
+  $("ssAddNodeFormCard")?.classList.add("hidden");
+  $("ssAddRouteFormCard")?.classList.add("hidden");
+}
+
+function populateRouteNodeOptions() {
+  const src = $("ssRouteSource");
+  const tgt = $("ssRouteTarget");
+  if (!src || !tgt || !ssWorldMap) return;
+
+  const nodes = ssWorldMap.nodes || [];
+  const opts = nodes.map(n => `<option value="${esc(n.id)}">${esc(n.name)} (${esc(n.node_type)})</option>`).join("");
+  src.innerHTML = opts;
+  tgt.innerHTML = opts;
+  if (nodes.length > 1) tgt.selectedIndex = 1;
+}
+
+async function saveMapNode() {
+  const name = $("ssNodeName")?.value.trim();
+  const node_type = $("ssNodeType")?.value || "citadel";
+  const faction = $("ssNodeFaction")?.value.trim();
+  const x = parseInt($("ssNodeX")?.value || "500", 10);
+  const y = parseInt($("ssNodeY")?.value || "300", 10);
+  const era_min = parseInt($("ssNodeEraMin")?.value || "1", 10);
+  const era_max = parseInt($("ssNodeEraMax")?.value || "5", 10);
+  const description = $("ssNodeDesc")?.value.trim();
+
+  if (!name) {
+    toast("Landmark name is required", true);
+    return;
+  }
+
+  try {
+    await api("/api/story/map/nodes", {
+      method: "POST",
+      body: JSON.stringify({
+        name,
+        node_type,
+        x,
+        y,
+        era_min,
+        era_max,
+        faction,
+        description
+      })
+    });
+    toast(`Created landmark "${name}"`);
+    $("ssAddNodeFormCard")?.classList.add("hidden");
+    $("ssMapNodeInspector")?.classList.remove("hidden");
+    loadWorldMap();
+  } catch (err) {
+    toast("Failed to add landmark: " + err.message, true);
+  }
+}
+
+async function saveMapRoute() {
+  const from_node_id = $("ssRouteSource")?.value;
+  const to_node_id = $("ssRouteTarget")?.value;
+  const route_type = $("ssRouteType")?.value || "road";
+  const danger_level = $("ssRouteDanger")?.value || "safe";
+
+  if (!from_node_id || !to_node_id || from_node_id === to_node_id) {
+    toast("Please select two distinct landmark nodes to connect", true);
+    return;
+  }
+
+  try {
+    await api("/api/story/map/routes", {
+      method: "POST",
+      body: JSON.stringify({
+        from_node_id,
+        to_node_id,
+        route_type,
+        danger_level,
+        era_min: 1,
+        era_max: 5
+      })
+    });
+    toast("Route connected successfully");
+    $("ssAddRouteFormCard")?.classList.add("hidden");
+    $("ssMapNodeInspector")?.classList.remove("hidden");
+    loadWorldMap();
+  } catch (err) {
+    toast("Failed to connect route: " + err.message, true);
+  }
+}
+
+async function deleteCurrentMapNode() {
+  if (!ssSelectedNode) return;
+  const ok = await askConfirm(`Delete landmark "${ssSelectedNode.name}" and all connected routes from the map?`);
+  if (!ok) return;
+
+  try {
+    await api(`/api/story/map/nodes/${ssSelectedNode.id}`, { method: "DELETE" });
+    toast(`Deleted landmark "${ssSelectedNode.name}"`);
+    ssSelectedNode = null;
+    $("ssInspectorEmptyState")?.classList.remove("hidden");
+    $("ssInspectorContent")?.classList.add("hidden");
+    $("btnSsDeleteNode")?.classList.add("hidden");
+    loadWorldMap();
+  } catch (err) {
+    toast("Failed to delete landmark: " + err.message, true);
+  }
+}
+
+/* ---------- TAB 4: MINI-APP WORKSHOP IMPLEMENTATION ---------- */
+async function loadMiniApps() {
+  const list = $("ssMiniAppsList");
+  if (!list) return;
+
+  try {
+    const res = await api("/api/mini-apps");
+    ssMiniApps = res.mini_apps || [];
+
+    if (ssMiniApps.length === 0) {
+      list.innerHTML = `<div class="muted ss-empty-state">No mini-apps created yet.</div>`;
+      return;
+    }
+
+    list.innerHTML = ssMiniApps.map(app => {
+      const isSelected = ssActiveMiniApp && ssActiveMiniApp.id === app.id;
+      return `
+        <div class="ss-app-list-item ${isSelected ? 'selected' : ''}" onclick="selectMiniApp('${esc(app.id)}')">
+          <div class="ss-app-list-title">${esc(app.title)}</div>
+          <div class="ss-app-list-desc">${esc(app.description || 'Custom interactive tool')}</div>
+        </div>
+      `;
+    }).join("");
+
+    if (!ssActiveMiniApp && ssMiniApps.length > 0) {
+      selectMiniApp(ssMiniApps[0].id);
+    }
+  } catch (err) {
+    list.innerHTML = `<div class="danger" style="padding:10px;">Error loading apps: ${esc(err.message)}</div>`;
+  }
+}
+
+async function selectMiniApp(id) {
+  const app = ssMiniApps.find(a => a.id === id);
+  if (!app) return;
+  ssActiveMiniApp = app;
+
+  document.querySelectorAll(".ss-app-list-item").forEach(el => {
+    el.classList.toggle("selected", el.getAttribute("onclick")?.includes(id));
+  });
+
+  $("ssAppTitle").textContent = app.title;
+  $("ssAppDescription").textContent = app.description || "Persistent sandboxed mini-app.";
+
+  // Update Code editors
+  $("ssAppEditTitle").value = app.title || "";
+  $("ssAppEditDesc").value = app.description || "";
+  $("ssAppEditHtml").value = app.html || "";
+  $("ssAppEditCss").value = app.css || "";
+  $("ssAppEditJs").value = app.js || "";
+
+  renderActiveMiniAppIframe();
+}
+
+function renderActiveMiniAppIframe() {
+  const iframe = $("ssMiniAppIframe");
+  if (!iframe || !ssActiveMiniApp) return;
+
+  const storageJson = JSON.stringify(ssActiveMiniApp.storage || {});
+
+  const htmlDoc = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${esc(ssActiveMiniApp.title)}</title>
+  <style>
+    body { margin: 0; padding: 16px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0c0d14; color: #f1f5f9; box-sizing: border-box; }
+    ${ssActiveMiniApp.css || ""}
+  </style>
+</head>
+<body>
+  ${ssActiveMiniApp.html || ""}
+  <script>
+    (function() {
+      // Mock persistent storage bridge
+      var _initialStorage = ${storageJson};
+      window.MiniAppStorage = {
+        get: function(key, defaultVal) {
+          return _initialStorage.hasOwnProperty(key) ? _initialStorage[key] : defaultVal;
+        },
+        set: function(key, val) {
+          _initialStorage[key] = val;
+          window.parent.postMessage({ type: 'MINI_APP_SET_STORAGE', key: key, value: val }, '*');
+        }
+      };
+      ${ssActiveMiniApp.js || ""}
+    })();
+  <\/script>
+</body>
+</html>
+  `;
+
+  iframe.srcdoc = htmlDoc;
+}
+
+function setMiniAppMode(mode) {
+  ssAppActiveMode = mode;
+  $("btnSsModeRun")?.classList.toggle("active", mode === "run");
+  $("btnSsModeCode")?.classList.toggle("active", mode === "code");
+  $("ssAppRunnerView")?.classList.toggle("hidden", mode !== "run");
+  $("ssAppCodeView")?.classList.toggle("hidden", mode !== "code");
+
+  if (mode === "run") {
+    renderActiveMiniAppIframe();
+  }
+}
+
+async function createNewMiniApp() {
+  const title = prompt("Enter a name for your new Mini-App:");
+  if (!title) return;
+
+  try {
+    const res = await api("/api/mini-apps", {
+      method: "POST",
+      body: JSON.stringify({
+        title,
+        description: "Custom sandboxed writer utility",
+        html: `<h3>${title}</h3>\n<button id="btnClick">Clicks: 0</button>`,
+        css: `button { background: #f43f5e; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; }`,
+        js: `var count = MiniAppStorage.get('clicks', 0);\nvar b = document.getElementById('btnClick');\nb.textContent = 'Clicks: ' + count;\nb.onclick = function() { count++; b.textContent = 'Clicks: ' + count; MiniAppStorage.set('clicks', count); };`,
+        storage: { clicks: 0 }
+      })
+    });
+    toast(`Created mini-app "${title}"`);
+    await loadMiniApps();
+    if (res.app && res.app.id) {
+      selectMiniApp(res.app.id);
+      setMiniAppMode("code");
+    }
+  } catch (err) {
+    toast("Failed to create mini-app: " + err.message, true);
+  }
+}
+
+async function saveMiniAppCode() {
+  if (!ssActiveMiniApp) return;
+
+  const title = $("ssAppEditTitle")?.value.trim() || ssActiveMiniApp.title;
+  const description = $("ssAppEditDesc")?.value.trim() || ssActiveMiniApp.description;
+  const html = $("ssAppEditHtml")?.value || "";
+  const css = $("ssAppEditCss")?.value || "";
+  const js = $("ssAppEditJs")?.value || "";
+
+  try {
+    const res = await api("/api/mini-apps", {
+      method: "POST",
+      body: JSON.stringify({
+        id: ssActiveMiniApp.id,
+        title,
+        description,
+        html,
+        css,
+        js,
+        storage: ssActiveMiniApp.storage || {}
+      })
+    });
+    toast("Mini-app code saved successfully");
+    ssActiveMiniApp = res.app || ssActiveMiniApp;
+    setMiniAppMode("run");
+    loadMiniApps();
+  } catch (err) {
+    toast("Failed to save mini-app: " + err.message, true);
+  }
+}
+
+function exportActiveMiniApp() {
+  if (!ssActiveMiniApp) {
+    toast("Select a mini-app to export", true);
+    return;
+  }
+  window.open(`/api/mini-apps/${ssActiveMiniApp.id}/export`, "_blank");
 }
 
 boot();

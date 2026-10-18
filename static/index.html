@@ -281,6 +281,23 @@
                 <span>Task router, presets, structured JSON &amp; prompt debugger</span>
               </div>
             </button>
+            <button class="workbench-menu-item" type="button" id="wbItemStoryStudio">
+              <span class="wb-item-icon wb-icon-rose">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
+                  <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path>
+                  <path d="M2 2l7.586 7.586"></path>
+                  <circle cx="11" cy="11" r="2"></circle>
+                </svg>
+              </span>
+              <div class="wb-item-info">
+                <div class="wb-item-title-row">
+                  <strong>Story Studio</strong>
+                  <span class="wb-badge wb-badge-rose">MUSE &amp; WORLDS</span>
+                </div>
+                <span>Story Bible, Scene Board, Worldbuilder &amp; Mini-Apps</span>
+              </div>
+            </button>
           </div>
           <div class="workbench-dropdown-divider"></div>
           <div class="workbench-dropdown-section">
@@ -1895,6 +1912,20 @@
   </div>
 
   <div class="cyber-drawer-body">
+    <!-- Story Studio Hub Quick Launch -->
+    <div class="cyber-card ss-quicklaunch-card" style="background: linear-gradient(135deg, rgba(244,63,94,0.12), rgba(168,85,247,0.12)); border: 1px solid rgba(244,63,94,0.35); margin-bottom: 12px;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <h4 style="margin:0 0 4px 0; color:#f43f5e; display:flex; align-items:center; gap:6px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-0.5-.05"/><path d="M6 6h10M6 10h10"/></svg>
+            Story Studio &amp; Worldbuilder
+          </h4>
+          <p class="muted" style="margin:0; font-size:0.75rem;">Canon bible, scene board, era world map &amp; sandboxed mini-apps.</p>
+        </div>
+        <button type="button" id="btnOpenStoryStudioFromMuse" class="cyber-btn primary-rose" style="font-size:0.75rem; padding:6px 12px; white-space:nowrap;">Open Studio ↗</button>
+      </div>
+    </div>
+
     <!-- Section 1: Narrative Voice & Directive -->
     <div class="cyber-card">
       <div class="cyber-card-head">
@@ -3319,6 +3350,496 @@
     <div class="modal-footer">
       <span id="miFooterMsg" class="muted" style="flex:1;font-size:0.75rem;"></span>
       <button id="btnDismissModelIntelligenceModal" class="ghost" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Story Studio, Worldbuilder & Persistent Artifacts Modal (Pillar 5) -->
+<div id="storyStudioModal" class="veil hidden">
+  <div class="modal-card ss-modal-card">
+    <div class="modal-head">
+      <div class="modal-title-wrap">
+        <span class="skills-title-icon" style="background:rgba(244,63,94,0.15); color:#f43f5e; border-color:rgba(244,63,94,0.3);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-0.5-.05"/>
+            <path d="M6 6h10M6 10h10"/>
+            <circle cx="17" cy="17" r="3"/>
+            <path d="m19 19 2 2"/>
+          </svg>
+        </span>
+        <div>
+          <h3>Creative Studio &amp; Worldbuilder</h3>
+          <p class="muted" style="margin:0;font-size:0.75rem;">Structured Canon Bible • Scene Board • Era-Scrubber World Map • Sandboxed Mini-Apps</p>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div class="ss-tab-nav">
+        <button type="button" class="ss-tab-btn active" data-tab="ssPaneBible" id="btnSsTabBible">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+          Story Bible
+        </button>
+        <button type="button" class="ss-tab-btn" data-tab="ssPaneScenes" id="btnSsTabScenes">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+          Scene Board &amp; Drafts
+        </button>
+        <button type="button" class="ss-tab-btn" data-tab="ssPaneMap" id="btnSsTabMap">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+          World Map &amp; Eras
+        </button>
+        <button type="button" class="ss-tab-btn" data-tab="ssPaneApps" id="btnSsTabApps">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          Mini-App Workshop
+        </button>
+      </div>
+
+      <button id="btnCloseStoryStudioModal" class="ghost closeBtn" title="Close Story Studio">✕</button>
+    </div>
+
+    <!-- Modal Body -->
+    <div class="modal-body ss-modal-body">
+      <!-- ================= TAB 1: STORY BIBLE & LORE ================= -->
+      <div id="ssPaneBible" class="ss-tab-pane">
+        <div class="ss-toolbar">
+          <div class="ss-filters-group">
+            <select id="ssFilterType" class="cyber-select-sm">
+              <option value="">All Entity Types</option>
+              <option value="character">Characters</option>
+              <option value="location">Locations</option>
+              <option value="faction">Factions &amp; Orders</option>
+              <option value="rule">World Rules &amp; Magic</option>
+              <option value="lore_event">Historical Lore Events</option>
+            </select>
+            <select id="ssFilterCanon" class="cyber-select-sm">
+              <option value="">All Canon Statuses</option>
+              <option value="canon">Canon</option>
+              <option value="draft">Draft</option>
+              <option value="hypothesis">Hypothesis</option>
+              <option value="discarded">Discarded</option>
+            </select>
+            <input type="text" id="ssSearchBible" class="cyber-input-sm" placeholder="Search entities, tags, lore...">
+          </div>
+          <div class="ss-actions-group">
+            <button type="button" id="btnSsToggleGraph" class="cyber-btn ghost-sm">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><circle cx="6" cy="18" r="3"/><line x1="8.5" y1="8.5" x2="15.5" y2="15.5"/><line x1="6" y1="9" x2="6" y2="15"/></svg>
+              <span id="ssGraphToggleLabel">Relationship Graph</span>
+            </button>
+            <button type="button" id="btnSsNewEntity" class="cyber-btn primary-rose-sm">+ Add Lore Entity</button>
+          </div>
+        </div>
+
+        <!-- Entity Creation/Edit Form Card (Collapsible) -->
+        <div id="ssEntityFormCard" class="ss-form-card hidden">
+          <div class="ss-form-head">
+            <h4 id="ssEntityFormTitle">New Lore Entity</h4>
+            <button type="button" id="btnCancelStoryEntity" class="ghost" style="padding:2px 8px;">✕</button>
+          </div>
+          <input type="hidden" id="ssEntityId" value="">
+          <div class="ss-form-grid">
+            <div class="form-group">
+              <label>Entity Name *</label>
+              <input type="text" id="ssEntityName" placeholder="e.g. Lady Vespera, Obsidian Spire">
+            </div>
+            <div class="form-group">
+              <label>Type *</label>
+              <select id="ssEntityType">
+                <option value="character">Character</option>
+                <option value="location">Location</option>
+                <option value="faction">Faction</option>
+                <option value="rule">World Rule / Magic</option>
+                <option value="lore_event">Lore Event</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Canon Status *</label>
+              <select id="ssEntityCanon">
+                <option value="canon">Canon (Established Fact)</option>
+                <option value="draft">Draft (Work in Progress)</option>
+                <option value="hypothesis">Hypothesis (Unverified)</option>
+                <option value="discarded">Discarded (Non-Canon)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Tags (comma separated)</label>
+              <input type="text" id="ssEntityTags" placeholder="e.g. mage, royal, house-corvus">
+            </div>
+            <div class="form-group ss-span-2">
+              <label>One-Line Summary</label>
+              <input type="text" id="ssEntitySummary" placeholder="Short description injected into prompt context">
+            </div>
+            <div class="form-group ss-span-2">
+              <label>Attributes (JSON key-values, optional)</label>
+              <input type="text" id="ssEntityAttrs" placeholder='{"role": "Archmage", "allegiance": "Corvus"}'>
+            </div>
+            <div class="form-group ss-span-2">
+              <label>Full Dossier / Canon Lore Details</label>
+              <textarea id="ssEntityDetails" rows="4" placeholder="Comprehensive lore, history, psychological traits, secrets..."></textarea>
+            </div>
+          </div>
+          <div class="row-btns" style="margin-top:10px; justify-content:flex-end;">
+            <button type="button" id="btnSaveStoryEntity" class="cyber-btn primary-rose">Save Lore Entity</button>
+          </div>
+        </div>
+
+        <!-- Entities Cards Grid View -->
+        <div id="ssEntitiesList" class="ss-entities-grid">
+          <div class="muted ss-empty-state">Loading Story Bible entities...</div>
+        </div>
+
+        <!-- Relationship Graph View (Canvas/SVG container) -->
+        <div id="ssGraphContainer" class="ss-graph-container hidden">
+          <div class="ss-graph-head">
+            <span class="muted" style="font-size:0.8rem;">Entity Connection &amp; Co-occurrence Web</span>
+            <span id="ssGraphStats" class="badge">0 nodes</span>
+          </div>
+          <div class="ss-graph-canvas-wrap">
+            <svg id="ssGraphSvg" width="100%" height="450"></svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= TAB 2: SCENE BOARD & DRAFTS ================= -->
+      <div id="ssPaneScenes" class="ss-tab-pane hidden">
+        <div class="ss-toolbar">
+          <div class="ss-filters-group">
+            <select id="ssFilterAct" class="cyber-select-sm">
+              <option value="">All Acts / Chapters</option>
+              <option value="Act 1">Act 1</option>
+              <option value="Act 2">Act 2</option>
+              <option value="Act 3">Act 3</option>
+              <option value="Epilogue">Epilogue</option>
+            </select>
+            <input type="text" id="ssSearchScenes" class="cyber-input-sm" placeholder="Search scenes, POV, conflict...">
+          </div>
+          <div class="ss-actions-group">
+            <button type="button" id="btnSsNewScene" class="cyber-btn primary-rose-sm">+ New Scene Draft</button>
+          </div>
+        </div>
+
+        <div class="ss-scenes-layout">
+          <!-- Scenes Board List -->
+          <div class="ss-scenes-column">
+            <div id="ssScenesList" class="ss-scenes-board">
+              <div class="muted ss-empty-state">No scenes created yet. Click "+ New Scene Draft" to begin.</div>
+            </div>
+          </div>
+
+          <!-- Scene Editor & Draft Workspace -->
+          <div class="ss-scene-editor-column">
+            <div id="ssSceneEditorPane" class="ss-scene-editor-card">
+              <div class="ss-editor-head">
+                <input type="hidden" id="ssSceneId" value="">
+                <input type="text" id="ssSceneTitle" class="ss-scene-title-input" placeholder="Scene Title (e.g. Shadows over the High Citadel)">
+                <div class="ss-editor-actions">
+                  <select id="ssSceneVersionsSelect" class="cyber-select-sm" title="Version Snapshots">
+                    <option value="">Current Draft</option>
+                  </select>
+                  <button type="button" id="btnSsRollbackVersion" class="cyber-btn ghost-sm" title="Rollback to selected version" disabled>Rollback</button>
+                  <button type="button" id="btnSaveStoryScene" class="cyber-btn primary-rose-sm">Save Snapshot</button>
+                </div>
+              </div>
+
+              <div class="ss-scene-meta-row">
+                <div class="ss-meta-item">
+                  <label>Act / Chapter</label>
+                  <input type="text" id="ssSceneAct" placeholder="e.g. Act 1, Scene 3">
+                </div>
+                <div class="ss-meta-item">
+                  <label>POV Character</label>
+                  <input type="text" id="ssScenePov" placeholder="e.g. Lady Vespera">
+                </div>
+                <div class="ss-meta-item">
+                  <label>Setting Location</label>
+                  <input type="text" id="ssSceneLocation" placeholder="e.g. The Spire Sanctum">
+                </div>
+                <div class="ss-meta-item">
+                  <label>Core Conflict</label>
+                  <input type="text" id="ssSceneConflict" placeholder="e.g. Treachery revealed">
+                </div>
+                <div class="ss-meta-item">
+                  <label>Status</label>
+                  <select id="ssSceneCanon">
+                    <option value="draft">Draft</option>
+                    <option value="canon">Canon</option>
+                    <option value="revision">Needs Revision</option>
+                    <option value="discarded">Discarded</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Draft Textarea -->
+              <div class="ss-draft-area-wrap">
+                <textarea id="ssSceneContent" class="ss-scene-textarea" rows="12" placeholder="Write or paste your scene draft here. Antigravity monitors canon continuity in real time..."></textarea>
+                <div class="ss-draft-statusbar">
+                  <div class="ss-draft-counters">
+                    <span id="ssSceneWordCount">0 words</span> • <span id="ssSceneCharCount">0 chars</span>
+                  </div>
+                  <div class="ss-draft-continuity-btn-wrap">
+                    <button type="button" id="btnAuditSceneContinuity" class="cyber-btn primary-cyan-sm">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+                      Audit Canon Continuity (AI)
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Continuity Audit Panel -->
+              <div id="ssContinuityPanel" class="ss-continuity-panel hidden">
+                <div class="ss-continuity-head">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span id="ssContinuityStatusBadge" class="badge">AUDITING...</span>
+                    <strong style="font-size:0.85rem;">Continuity &amp; Contradiction Report</strong>
+                  </div>
+                  <button type="button" id="btnCloseContinuityReport" class="ghost" style="padding:2px 8px;">✕</button>
+                </div>
+                <p id="ssContinuitySummary" class="muted" style="margin:4px 0 8px; font-size:0.8rem;"></p>
+                <div id="ssContinuityIssuesList" class="ss-continuity-issues-list"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= TAB 3: WORLDBUILDER MAP & ERAS ================= -->
+      <div id="ssPaneMap" class="ss-tab-pane hidden">
+        <!-- Era Timeline Scrubber -->
+        <div class="ss-era-scrubber-banner">
+          <div class="ss-era-slider-wrap">
+            <div class="ss-era-labels-row">
+              <span class="ss-era-step-label">Era 1: Dawn / Ancient</span>
+              <span class="ss-era-step-label">Era 2: Classical</span>
+              <span class="ss-era-step-label">Era 3: Imperial High</span>
+              <span class="ss-era-step-label">Era 4: The Calamity</span>
+              <span class="ss-era-step-label">Era 5: Modern Era</span>
+            </div>
+            <input type="range" id="ssEraSlider" min="1" max="5" step="1" value="3" class="ss-era-slider">
+          </div>
+          <div class="ss-era-info-card">
+            <span class="muted" style="font-size:0.7rem; text-transform:uppercase; letter-spacing:0.05em;">Active Timeline Scrubber</span>
+            <div id="ssCurrentEraName" class="bold" style="color:#f43f5e; font-size:1rem;">Era 3: Imperial High Era</div>
+            <div id="ssEraDescription" class="muted" style="font-size:0.75rem;">Showing settlements, citadels, and trade routes active during this historical timeframe.</div>
+          </div>
+        </div>
+
+        <div class="ss-map-workspace">
+          <!-- Interactive SVG World Map Canvas -->
+          <div class="ss-map-canvas-container" id="ssMapCanvasContainer">
+            <div class="ss-map-canvas-toolbar">
+              <span class="muted" style="font-size:0.75rem;">World Map Canvas (Click landmark or route to inspect)</span>
+              <div class="ss-map-quick-actions">
+                <button type="button" id="btnSsAddNodeQuick" class="cyber-btn ghost-sm">+ Add Landmark Node</button>
+                <button type="button" id="btnSsAddRouteQuick" class="cyber-btn ghost-sm">+ Connect Route</button>
+                <button type="button" id="btnSsResetMapZoom" class="cyber-btn ghost-sm">Center Map</button>
+              </div>
+            </div>
+            <div class="ss-svg-viewport">
+              <svg id="ssWorldMapSvg" viewBox="0 0 1000 600" width="100%" height="100%">
+                <defs>
+                  <radialGradient id="ssMapBgGrad" cx="50%" cy="50%" r="65%">
+                    <stop offset="0%" stop-color="#181824" />
+                    <stop offset="100%" stop-color="#0c0d14" />
+                  </radialGradient>
+                  <pattern id="ssGridPattern" width="40" height="40" patternUnits="userSpaceOnUse">
+                    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.03)" stroke-width="1"/>
+                  </pattern>
+                  <filter id="ssGlow" x="-20%" y="-20%" width="140%" height="140%">
+                    <feGaussianBlur stdDeviation="3" result="blur" />
+                    <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                  </filter>
+                </defs>
+                <rect width="1000" height="600" fill="url(#ssMapBgGrad)" />
+                <rect width="1000" height="600" fill="url(#ssGridPattern)" />
+                <g id="ssMapRoutesLayer"></g>
+                <g id="ssMapNodesLayer"></g>
+              </svg>
+            </div>
+          </div>
+
+          <!-- Map Side Inspector / Management Card -->
+          <div class="ss-map-sidebar">
+            <!-- Node Inspector Card -->
+            <div id="ssMapNodeInspector" class="ss-map-inspector-card">
+              <div class="ss-inspector-head">
+                <h4 id="ssInspectorNodeName">Landmark Inspector</h4>
+                <button type="button" id="btnSsDeleteNode" class="cyber-btn ghost-sm danger hidden" title="Delete Landmark">Delete</button>
+              </div>
+              <div id="ssInspectorEmptyState" class="muted ss-empty-state">
+                Click any landmark node or route on the map to inspect lore, controlling faction, and era longevity.
+              </div>
+              <div id="ssInspectorContent" class="ss-inspector-body hidden">
+                <div class="ss-insp-row"><span class="muted">Type:</span> <span id="ssInspType" class="badge">Citadel</span></div>
+                <div class="ss-insp-row"><span class="muted">Faction:</span> <span id="ssInspFaction" class="bold">House Corvus</span></div>
+                <div class="ss-insp-row"><span class="muted">Timeline:</span> <span id="ssInspEras" class="muted">Era 1 to 5</span></div>
+                <div class="ss-insp-row"><span class="muted">Coordinates:</span> <span id="ssInspCoords" class="mono">X: 300, Y: 220</span></div>
+                <p id="ssInspDesc" class="ss-insp-desc"></p>
+              </div>
+            </div>
+
+            <!-- Add Landmark Form (Collapsible) -->
+            <div id="ssAddNodeFormCard" class="ss-map-inspector-card hidden">
+              <div class="ss-inspector-head">
+                <h4>Add Landmark Node</h4>
+                <button type="button" id="btnCancelAddNode" class="ghost">✕</button>
+              </div>
+              <div class="ss-form-grid" style="grid-template-columns:1fr 1fr;">
+                <div class="form-group ss-span-2">
+                  <label>Landmark Name *</label>
+                  <input type="text" id="ssNodeName" placeholder="e.g. Iron Citadel">
+                </div>
+                <div class="form-group">
+                  <label>Type *</label>
+                  <select id="ssNodeType">
+                    <option value="citadel">Citadel / Stronghold</option>
+                    <option value="settlement">Settlement / City</option>
+                    <option value="port">Harbor / Port</option>
+                    <option value="ruin">Ancient Ruin</option>
+                    <option value="sanctum">Arcane Sanctum</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Faction</label>
+                  <input type="text" id="ssNodeFaction" placeholder="Controlling faction">
+                </div>
+                <div class="form-group">
+                  <label>X (0-1000)</label>
+                  <input type="number" id="ssNodeX" value="500" min="20" max="980">
+                </div>
+                <div class="form-group">
+                  <label>Y (0-600)</label>
+                  <input type="number" id="ssNodeY" value="300" min="20" max="580">
+                </div>
+                <div class="form-group">
+                  <label>Min Era</label>
+                  <input type="number" id="ssNodeEraMin" value="1" min="1" max="5">
+                </div>
+                <div class="form-group">
+                  <label>Max Era</label>
+                  <input type="number" id="ssNodeEraMax" value="5" min="1" max="5">
+                </div>
+                <div class="form-group ss-span-2">
+                  <label>Description / Lore</label>
+                  <textarea id="ssNodeDesc" rows="2" placeholder="Key history and tactical significance"></textarea>
+                </div>
+              </div>
+              <div class="row-btns" style="margin-top:8px; justify-content:flex-end;">
+                <button type="button" id="btnSaveMapNode" class="cyber-btn primary-rose-sm">Create Landmark</button>
+              </div>
+            </div>
+
+            <!-- Add Route Form (Collapsible) -->
+            <div id="ssAddRouteFormCard" class="ss-map-inspector-card hidden">
+              <div class="ss-inspector-head">
+                <h4>Connect Route</h4>
+                <button type="button" id="btnCancelAddRoute" class="ghost">✕</button>
+              </div>
+              <div class="ss-form-grid">
+                <div class="form-group">
+                  <label>Source Node</label>
+                  <select id="ssRouteSource"></select>
+                </div>
+                <div class="form-group">
+                  <label>Target Node</label>
+                  <select id="ssRouteTarget"></select>
+                </div>
+                <div class="form-group">
+                  <label>Route Type</label>
+                  <select id="ssRouteType">
+                    <option value="road">High Road / King's Way</option>
+                    <option value="sea_lane">Sea Lane / Maritime Route</option>
+                    <option value="portal">Leyline / Arcane Portal</option>
+                    <option value="caravan">Caravan Trail / Mountain Pass</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Danger Level</label>
+                  <select id="ssRouteDanger">
+                    <option value="safe">Safe (Patrolled)</option>
+                    <option value="moderate">Moderate (Bandits/Weather)</option>
+                    <option value="perilous">Perilous (Monsters/Calamity)</option>
+                  </select>
+                </div>
+              </div>
+              <div class="row-btns" style="margin-top:8px; justify-content:flex-end;">
+                <button type="button" id="btnSaveMapRoute" class="cyber-btn primary-cyan-sm">Add Route</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= TAB 4: MINI-APP WORKSHOP ================= -->
+      <div id="ssPaneApps" class="ss-tab-pane hidden">
+        <div class="ss-apps-layout">
+          <!-- Apps Sidebar -->
+          <div class="ss-apps-sidebar">
+            <div class="ss-apps-sidebar-head">
+              <strong>Sandboxed Tools</strong>
+              <button type="button" id="btnSsNewApp" class="cyber-btn primary-rose-sm">+ New App</button>
+            </div>
+            <div id="ssMiniAppsList" class="ss-apps-list">
+              <div class="muted ss-empty-state">Loading mini-apps...</div>
+            </div>
+          </div>
+
+          <!-- App Workspace -->
+          <div class="ss-apps-workspace">
+            <div class="ss-app-topbar">
+              <div>
+                <h4 id="ssAppTitle" style="margin:0 0 2px 0;">Select a Mini-App</h4>
+                <div id="ssAppDescription" class="muted" style="font-size:0.75rem;">Persistent local utilities with isolated storage.</div>
+              </div>
+              <div class="ss-app-controls">
+                <div class="ss-app-mode-switch">
+                  <button type="button" id="btnSsModeRun" class="cyber-btn-tab active">Interactive Canvas</button>
+                  <button type="button" id="btnSsModeCode" class="cyber-btn-tab">Code &amp; Assets</button>
+                </div>
+                <button type="button" id="btnExportMiniAppHtml" class="cyber-btn ghost-sm" title="Download standalone offline single-file HTML">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Export Standalone HTML
+                </button>
+              </div>
+            </div>
+
+            <!-- Live Runner View -->
+            <div id="ssAppRunnerView" class="ss-app-runner-pane">
+              <iframe id="ssMiniAppIframe" sandbox="allow-scripts" class="ss-app-iframe"></iframe>
+            </div>
+
+            <!-- Code & Assets View -->
+            <div id="ssAppCodeView" class="ss-app-code-pane hidden">
+              <div class="ss-code-edit-header">
+                <div class="form-group flex-1">
+                  <label>App Title</label>
+                  <input type="text" id="ssAppEditTitle" placeholder="App Title">
+                </div>
+                <div class="form-group flex-1">
+                  <label>Description</label>
+                  <input type="text" id="ssAppEditDesc" placeholder="Description of utility">
+                </div>
+                <div class="row-btns" style="align-items:flex-end;">
+                  <button type="button" id="btnSaveMiniAppCode" class="cyber-btn primary-rose-sm">Save Code</button>
+                </div>
+              </div>
+              <div class="ss-code-tabs-row">
+                <button type="button" class="ss-code-tab active" data-codetab="html">HTML</button>
+                <button type="button" class="ss-code-tab" data-codetab="css">CSS</button>
+                <button type="button" class="ss-code-tab" data-codetab="js">JavaScript</button>
+              </div>
+              <div class="ss-code-editors">
+                <textarea id="ssAppEditHtml" class="ss-code-editor" placeholder="HTML Markup"></textarea>
+                <textarea id="ssAppEditCss" class="ss-code-editor hidden" placeholder="CSS Styles"></textarea>
+                <textarea id="ssAppEditJs" class="ss-code-editor hidden" placeholder="JavaScript Code"></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Footer -->
+    <div class="modal-footer ss-modal-footer">
+      <span id="ssFooterStatus" class="muted" style="flex:1;font-size:0.75rem;">Pillar 5 Creative Studio Active • Isolated Local Sandbox</span>
+      <button id="btnDismissStoryStudioModal" class="ghost" type="button">Close</button>
     </div>
   </div>
 </div>
